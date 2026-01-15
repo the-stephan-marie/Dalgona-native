@@ -1,0 +1,5 @@
+# Place your 3D assets here:
+# - model.glb (required)
+# - model.usdz (optional, for iOS)
+# - environment.hdr (optional, for custom lighting)
+

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tap-to-Advance AR Experience</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    
+    <style>
+        /* --- CSS STYLING --- */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Helvetica', 'Arial', sans-serif; 
+            overflow: hidden; 
+        }
+        
+        /* The AR Window */
+        model-viewer {
+            width: 100vw;
+            height: 100vh;
+            background-color: #f5f5f5; /* Fallback color */
+            --poster-color: #f5f5f5;
+        }
+
+        /* The UI Overlay Container */
+        #ui-layer {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none; /* Let taps pass through to the 3D model */
+            z-index: 100;
+        }
+
+        /* The Branding / Instruction Card */
+        .card {
+            display: inline-block;
+            background: white;
+            padding: 16px 24px;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            transform: translateY(0);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+
+        .card h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card p {
+            margin: 4px 0 0 0;
+            font-size: 14px;
+            color: #555;
+        }
+
+        /* Hide UI while loading */
+        model-viewer:not([loaded]) #ui-layer { 
+            opacity: 0; 
+        }
+
+        /* Custom AR Button Styling */
+        #ar-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 200;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #ar-button:hover {
+            background: #0056CC;
+        }
+    </style>
+</head>
+<body>
+
+    <model-viewer 
+        id="ar-viewer"
+        src="assets/model.glb"
+        ios-src="assets/model.usdz"
+        ar
+        ar-modes="webxr scene-viewer quick-look"
+        camera-controls
+        disable-zoom
+        shadow-intensity="1.2"
+        environment-image="neutral" 
+        tone-mapping="commerce"
+        animation-name="Idle">
+        
+        <button slot="ar-button" id="ar-button">
+            View in your space
+        </button>
+    </model-viewer>
+
+    <div id="ui-layer">
+        <div class="card" id="info-card">
+            <h2 id="step-title">Welcome</h2>
+            <p id="step-desc">Tap anywhere to start!</p>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION: Customize your experience here
+        // ============================================
+        
+        const CONFIG = {
+            // Path to your 3D model (GLB format)
+            modelPath: 'assets/model.glb',
+            
+            // Path to iOS USDZ format (optional, for better iOS support)
+            iosModelPath: 'assets/model.usdz',
+            
+            // Initial animation clip name (should match your 3D asset's "Idle" take)
+            initialAnimation: 'Idle',
+            
+            // Animation sequence - these names MUST match your C4D Take names exactly
+            // Update this array with your animation clips and corresponding UI text
+            steps: [
+                { 
+                    clip: 'Step1_Mix', 
+                    title: 'Step 1: The Mix', 
+                    desc: 'Adding ingredients...' 
+                },
+                { 
+                    clip: 'Step2_Whip', 
+                    title: 'Step 2: Whip It', 
+                    desc: 'Whipping into foam...' 
+                },
+                { 
+                    clip: 'Step3_Mug', 
+                    title: 'Step 3: The Base', 
+                    desc: 'Preparing the base...' 
+                },
+                { 
+                    clip: 'Step4_Transfer', 
+                    title: 'Step 4: The Finish', 
+                    desc: 'Final touches!' 
+                },
+                { 
+                    clip: 'Final_Loop', 
+                    title: 'Complete', 
+                    desc: 'Enjoy your creation!' 
+                }
+            ],
+            
+            // Welcome message
+            welcomeTitle: 'Welcome',
+            welcomeDesc: 'Tap anywhere to start!',
+            
+            // Continue prompt
+            continuePrompt: 'Tap to continue ->',
+            
+            // Reset message
+            resetTitle: 'Replay?',
+            resetDesc: 'Tap to start again.'
+        };
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        
+        const viewer = document.querySelector('#ar-viewer');
+        const titleText = document.querySelector('#step-title');
+        const descText = document.querySelector('#step-desc');
+        const card = document.querySelector('#info-card');
+
+        // Set model paths from config
+        viewer.src = CONFIG.modelPath;
+        if (CONFIG.iosModelPath) {
+            viewer.setAttribute('ios-src', CONFIG.iosModelPath);
+        }
+        viewer.animationName = CONFIG.initialAnimation;
+
+        // Set welcome message
+        titleText.innerText = CONFIG.welcomeTitle;
+        descText.innerText = CONFIG.welcomeDesc;
+
+        // ============================================
+        // STATE MANAGEMENT
+        // ============================================
+        
+        let currentStepIndex = -1; // Starts before the first step
+        let isAnimating = false;
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+
+        // 1. LISTEN FOR TAPS
+        // We listen on 'click' which works for both Mouse (Desktop) and Tap (Mobile)
+        document.addEventListener('click', (event) => {
+            
+            // Ignore taps if we are currently playing an animation
+            if (isAnimating) return;
+            
+            // Ignore taps if clicking the AR button
+            if (event.target.id === 'ar-button') return;
+
+            // If we have steps left, advance
+            if (currentStepIndex < CONFIG.steps.length - 1) {
+                playNextStep();
+            } else {
+                // Restart experience
+                resetExperience();
+            }
+        });
+
+        // 2. PLAY FUNCTION
+        function playNextStep() {
+            currentStepIndex++;
+            const stepData = CONFIG.steps[currentStepIndex];
+
+            // Update UI
+            titleText.innerText = stepData.title;
+            descText.innerText = stepData.desc;
+            isAnimating = true;
+
+            // Trigger Animation
+            viewer.animationName = stepData.clip;
+            viewer.play();
+            
+            // Important: We only loop the FINAL step. All others play once.
+            if (currentStepIndex === CONFIG.steps.length - 1) {
+                viewer.loop = true;
+            } else {
+                viewer.loop = false;
+            }
+        }
+
+        // 3. LISTEN FOR COMPLETION
+        viewer.addEventListener('finished', () => {
+            // This fires when a non-looping animation finishes
+            isAnimating = false;
+            
+            // Update UI to prompt user for the next action
+            if (currentStepIndex < CONFIG.steps.length - 1) {
+                descText.innerText = CONFIG.continuePrompt;
+            }
+        });
+
+        // 4. RESET LOGIC
+        function resetExperience() {
+            currentStepIndex = -1;
+            titleText.innerText = CONFIG.resetTitle;
+            descText.innerText = CONFIG.resetDesc;
+            viewer.animationName = CONFIG.initialAnimation;
+            viewer.loop = true; // Idle should loop
+        }
+
+        // ============================================
+        // ERROR HANDLING
+        // ============================================
+        
+        viewer.addEventListener('error', (event) => {
+            console.error('Model loading error:', event.detail);
+            titleText.innerText = 'Error';
+            descText.innerText = 'Failed to load 3D model. Check console for details.';
+        });
+
+        viewer.addEventListener('load', () => {
+            console.log('Model loaded successfully');
+        });
+
+    </script>
+</body>
+</html>
+
