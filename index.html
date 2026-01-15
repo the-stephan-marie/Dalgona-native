@@ -191,6 +191,47 @@
         descText.innerText = CONFIG.welcomeDesc;
 
         // ============================================
+        // AR AVAILABILITY CHECK & DESKTOP HANDLING
+        // ============================================
+        
+        // Detect mobile devices
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+        
+        // Handle AR button visibility and errors
+        const arButton = document.querySelector('#ar-button');
+        
+        // Listen for AR status changes
+        viewer.addEventListener('ar-status', (event) => {
+            // AR status changed - button visibility is handled by model-viewer
+            console.log('AR status:', event.detail.status);
+        });
+        
+        // Catch AR launch errors (like the Intent URL error on desktop)
+        window.addEventListener('error', (event) => {
+            if (event.message && event.message.includes('intent://')) {
+                console.warn('AR Intent URL not supported on this device');
+                // Optionally show a user-friendly message
+                if (!isMobileDevice()) {
+                    console.info('AR is only available on mobile devices. Please open this page on your phone or tablet.');
+                }
+            }
+        });
+        
+        // Check AR availability after model loads
+        viewer.addEventListener('load', () => {
+            // Small delay to let model-viewer update AR availability
+            setTimeout(() => {
+                if (!viewer.arAvailable && !isMobileDevice()) {
+                    // On desktop without WebXR, hide the button
+                    // Note: model-viewer should handle this, but we ensure it's hidden
+                    arButton.style.display = 'none';
+                }
+            }, 1000);
+        });
+
+        // ============================================
         // STATE MANAGEMENT
         // ============================================
         
