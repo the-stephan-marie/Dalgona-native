@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tap-to-Advance AR Experience</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     
     <style>
@@ -90,7 +91,7 @@
 
     <model-viewer 
         id="ar-viewer"
-        src="assets/model.glb"
+        src="assets/Dalgona-OneTake_0001.glb"
         ios-src="assets/model.usdz"
         ar
         ar-modes="webxr scene-viewer quick-look"
@@ -99,7 +100,8 @@
         shadow-intensity="1.2"
         environment-image="neutral" 
         tone-mapping="commerce"
-        animation-name="Idle">
+        animation-name="animation_0"
+        autoplay="false">
         
         <button slot="ar-button" id="ar-button">
             View in your space
@@ -109,13 +111,13 @@
     <div id="ui-layer">
         <div class="card" id="info-card">
             <h2 id="step-title">Welcome</h2>
-            <p id="step-desc">Tap anywhere to start!</p>
+            <p id="step-desc">Tap the Nescafé sachet to start!</p>
         </div>
     </div>
 
     <script>
         // ============================================
-        // CONFIGURATION: Customize your experience here
+        // CONFIGURATION: Keyframe-based animation with object-specific taps
         // ============================================
         
         const CONFIG = {
@@ -125,49 +127,74 @@
             // Path to iOS USDZ format (optional, for better iOS support)
             iosModelPath: 'assets/model.usdz',
             
-            // Initial animation clip name (should match your 3D asset's "Idle" take)
-            initialAnimation: 'Idle',
+            // Animation name (single track)
+            animationName: 'animation_0',
             
-            // Animation sequence - these names MUST match your C4D Take names exactly
-            // Update this array with your animation clips and corresponding UI text
+            // Frame rate of your animation
+            fps: 30,
+            
+            // Keyframe spans for each step
             steps: [
                 { 
-                    clip: 'Step1_Mix', 
+                    startFrame: 1,
+                    endFrame: 80,
                     title: 'Step 1: The Mix', 
-                    desc: 'Adding ingredients...' 
+                    desc: 'Nescafé + Water into bowl',
+                    objectHint: 'Tap the Nescafé sachet, pot, or handle'
                 },
                 { 
-                    clip: 'Step2_Whip', 
+                    startFrame: 80,
+                    endFrame: 140,
                     title: 'Step 2: Whip It', 
-                    desc: 'Whipping into foam...' 
+                    desc: 'Whisking into foam...',
+                    objectHint: 'Tap the whisk'
                 },
                 { 
-                    clip: 'Step3_Mug', 
+                    startFrame: 140,
+                    endFrame: 200,
                     title: 'Step 3: The Base', 
-                    desc: 'Preparing the base...' 
+                    desc: 'Milk into mug...',
+                    objectHint: 'Tap the jug'
                 },
                 { 
-                    clip: 'Step4_Transfer', 
-                    title: 'Step 4: The Finish', 
-                    desc: 'Final touches!' 
+                    startFrame: 200,
+                    endFrame: 240,
+                    title: 'Step 4: Transfer', 
+                    desc: 'Bowl into mug...',
+                    objectHint: 'Tap the mixing bowl'
                 },
                 { 
-                    clip: 'Final_Loop', 
-                    title: 'Complete', 
-                    desc: 'Enjoy your creation!' 
+                    startFrame: 240,
+                    endFrame: 300,
+                    title: 'Step 5: Final Touch', 
+                    desc: 'Add ice...',
+                    objectHint: 'Tap the scoop or ice bowl',
+                    loop: false
                 }
+            ],
+            
+            // Object names that trigger each step (must match GLB mesh names)
+            interactiveObjects: [
+                ['Nescafe.BTM', 'Nescafe.TOP (Copy)', 'pot', 'handle'],  // Step 1
+                ['whisk'],                                                // Step 2
+                ['jug'],                                                  // Step 3
+                ['mixing.bowl'],                                          // Step 4
+                ['scoop', 'ice.bowl']                                     // Step 5
             ],
             
             // Welcome message
             welcomeTitle: 'Welcome',
-            welcomeDesc: 'Tap anywhere to start!',
+            welcomeDesc: 'Tap the Nescafé sachet to start!',
             
             // Continue prompt
-            continuePrompt: 'Tap to continue ->',
+            continuePrompt: 'Tap the correct object to continue ->',
             
             // Reset message
             resetTitle: 'Replay?',
-            resetDesc: 'Tap to start again.'
+            resetDesc: 'Tap to start again.',
+            
+            // Visual feedback for interactive objects
+            enableHoverFeedback: true
         };
 
         // ============================================
@@ -184,11 +211,243 @@
         if (CONFIG.iosModelPath) {
             viewer.setAttribute('ios-src', CONFIG.iosModelPath);
         }
-        viewer.animationName = CONFIG.initialAnimation;
+        viewer.animationName = CONFIG.animationName;
+        viewer.autoplay = false;
+        viewer.loop = false;
 
         // Set welcome message
         titleText.innerText = CONFIG.welcomeTitle;
         descText.innerText = CONFIG.welcomeDesc;
+
+        // ============================================
+        // THREE.JS RAYCASTING SETUP
+        // ============================================
+        
+        let raycaster = null;
+        let camera = null;
+        let scene = null;
+        let mouse = new THREE.Vector2();
+        let interactiveMeshes = new Map(); // Cache of interactive objects
+        let animationCheckInterval = null;
+
+        // Initialize raycasting after model loads
+        viewer.addEventListener('load', () => {
+            setupRaycasting();
+            // Set initial time to frame 1
+            viewer.currentTime = frameToTime(1);
+            viewer.pause();
+        });
+
+        function setupRaycasting() {
+            // Get Three.js scene from model-viewer
+            scene = viewer.getScene();
+            
+            if (!scene) {
+                console.error('Could not access Three.js scene');
+                return;
+            }
+            
+            // Get camera from model-viewer
+            camera = viewer.getCamera();
+            
+            // Create raycaster
+            raycaster = new THREE.Raycaster();
+            
+            // Find and cache all interactive objects
+            findInteractiveObjects();
+            
+            console.log('Raycasting initialized. Interactive objects:', Array.from(interactiveMeshes.keys()));
+        }
+
+        function findInteractiveObjects() {
+            if (!scene) return;
+            
+            // Traverse the scene to find objects
+            scene.traverse((object) => {
+                // Check if this object matches any of our interactive object names
+                const objectName = object.name || '';
+                
+                // Check against configured interactive objects
+                CONFIG.interactiveObjects.forEach((targetNames, stepIndex) => {
+                    // Handle both string and array formats
+                    const names = Array.isArray(targetNames) ? targetNames : [targetNames];
+                    
+                    names.forEach(name => {
+                        // Match by exact name (case-sensitive)
+                        if (objectName === name) {
+                            // Only mesh objects can be clicked
+                            if (object.isMesh) {
+                                // Store reference with step index
+                                if (!interactiveMeshes.has(stepIndex)) {
+                                    interactiveMeshes.set(stepIndex, []);
+                                }
+                                interactiveMeshes.get(stepIndex).push(object);
+                                
+                                // Enable hover feedback if configured
+                                if (CONFIG.enableHoverFeedback) {
+                                    setupHoverFeedback(object);
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+            
+            // If no objects found, log available object names for debugging
+            if (interactiveMeshes.size === 0) {
+                console.warn('No interactive objects found. Available objects:');
+                scene.traverse((object) => {
+                    if (object.isMesh) {
+                        console.log('-', object.name || '(unnamed)');
+                    }
+                });
+            }
+        }
+
+        // ============================================
+        // HOVER FEEDBACK (Optional)
+        // ============================================
+
+        function setupHoverFeedback(object) {
+            const originalMaterial = object.material;
+            
+            // Create hover material (slightly brighter/emissive)
+            const hoverMaterial = originalMaterial.clone();
+            if (hoverMaterial.emissive) {
+                hoverMaterial.emissive.setHex(0x444444);
+            }
+            
+            // Store original material
+            object.userData.originalMaterial = originalMaterial;
+            object.userData.hoverMaterial = hoverMaterial;
+        }
+
+        function updateHoverFeedback(event) {
+            if (!CONFIG.enableHoverFeedback || !raycaster) return;
+            
+            const intersectedObject = getIntersectedObject(event);
+            
+            // Reset all objects to original material
+            interactiveMeshes.forEach((objects) => {
+                objects.forEach(obj => {
+                    if (obj.userData && obj.userData.originalMaterial) {
+                        obj.material = obj.userData.originalMaterial;
+                    }
+                });
+            });
+            
+            // Highlight hovered object
+            if (intersectedObject) {
+                const stepIndex = getStepIndexForObject(intersectedObject);
+                if (stepIndex !== -1 && intersectedObject.userData && intersectedObject.userData.hoverMaterial) {
+                    intersectedObject.material = intersectedObject.userData.hoverMaterial;
+                    viewer.style.cursor = 'pointer';
+                } else {
+                    viewer.style.cursor = 'default';
+                }
+            } else {
+                viewer.style.cursor = 'default';
+            }
+        }
+
+        // ============================================
+        // KEYFRAME-BASED PLAYBACK FUNCTIONS
+        // ============================================
+
+        // Convert frame number to time in seconds
+        function frameToTime(frame, fps = CONFIG.fps) {
+            return frame / fps;
+        }
+
+        // Play a specific keyframe range
+        function playKeyframeRange(stepData) {
+            const startTime = frameToTime(stepData.startFrame);
+            const endTime = frameToTime(stepData.endFrame);
+            
+            // Set the start time
+            viewer.currentTime = startTime;
+            
+            // Play the animation
+            viewer.play();
+            viewer.loop = stepData.loop || false;
+            
+            // Monitor playback using requestAnimationFrame for smooth control
+            function checkPlayback() {
+                if (!isAnimating) return; // Stop if user advanced
+                
+                if (viewer.currentTime >= endTime) {
+                    viewer.pause();
+                    isAnimating = false;
+                    
+                    if (stepData.loop) {
+                        // Restart this range
+                        viewer.currentTime = startTime;
+                        viewer.play();
+                        requestAnimationFrame(checkPlayback);
+                    } else {
+                        // Finished
+                        if (currentStepIndex < CONFIG.steps.length - 1) {
+                            descText.innerText = CONFIG.continuePrompt;
+                        }
+                    }
+                } else {
+                    requestAnimationFrame(checkPlayback);
+                }
+            }
+            
+            requestAnimationFrame(checkPlayback);
+        }
+
+        // ============================================
+        // OBJECT-SPECIFIC CLICK DETECTION
+        // ============================================
+
+        function getIntersectedObject(event) {
+            if (!raycaster || !camera || !scene) {
+                return null;
+            }
+            
+            // Get mouse/touch position in normalized device coordinates (-1 to +1)
+            const rect = viewer.getBoundingClientRect();
+            const clientX = event.clientX || (event.touches && event.touches[0]?.clientX) || 0;
+            const clientY = event.clientY || (event.touches && event.touches[0]?.clientY) || 0;
+            
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            
+            // Update raycaster with camera and mouse position
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Get all meshes in the scene for intersection testing
+            const meshes = [];
+            scene.traverse((object) => {
+                if (object.isMesh) {
+                    meshes.push(object);
+                }
+            });
+            
+            // Calculate intersections
+            const intersects = raycaster.intersectObjects(meshes, true);
+            
+            if (intersects.length > 0) {
+                return intersects[0].object;
+            }
+            
+            return null;
+        }
+
+        function getStepIndexForObject(object) {
+            if (!object) return -1;
+            
+            // Find which step this object belongs to
+            for (const [stepIndex, objects] of interactiveMeshes.entries()) {
+                if (objects.includes(object)) {
+                    return stepIndex;
+                }
+            }
+            
+            return -1;
+        }
 
         // ============================================
         // AR AVAILABILITY CHECK & DESKTOP HANDLING
@@ -204,7 +463,6 @@
         
         // Listen for AR status changes
         viewer.addEventListener('ar-status', (event) => {
-            // AR status changed - button visibility is handled by model-viewer
             console.log('AR status:', event.detail.status);
         });
         
@@ -212,7 +470,6 @@
         window.addEventListener('error', (event) => {
             if (event.message && event.message.includes('intent://')) {
                 console.warn('AR Intent URL not supported on this device');
-                // Optionally show a user-friendly message
                 if (!isMobileDevice()) {
                     console.info('AR is only available on mobile devices. Please open this page on your phone or tablet.');
                 }
@@ -221,11 +478,8 @@
         
         // Check AR availability after model loads
         viewer.addEventListener('load', () => {
-            // Small delay to let model-viewer update AR availability
             setTimeout(() => {
                 if (!viewer.arAvailable && !isMobileDevice()) {
-                    // On desktop without WebXR, hide the button
-                    // Note: model-viewer should handle this, but we ensure it's hidden
                     arButton.style.display = 'none';
                 }
             }, 1000);
@@ -242,26 +496,64 @@
         // EVENT HANDLERS
         // ============================================
 
-        // 1. LISTEN FOR TAPS
-        // We listen on 'click' which works for both Mouse (Desktop) and Tap (Mobile)
-        document.addEventListener('click', (event) => {
+        // OBJECT-SPECIFIC CLICK HANDLER
+        viewer.addEventListener('click', (event) => {
+            // Ignore if animating (unless it's a looping step)
+            if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) return;
             
-            // Ignore taps if we are currently playing an animation
-            if (isAnimating) return;
-            
-            // Ignore taps if clicking the AR button
+            // Ignore AR button clicks
             if (event.target.id === 'ar-button') return;
-
-            // If we have steps left, advance
-            if (currentStepIndex < CONFIG.steps.length - 1) {
+            
+            // Get the clicked object
+            const clickedObject = getIntersectedObject(event);
+            
+            if (!clickedObject) {
+                // Clicked on empty space - show feedback
+                if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
+                    const stepData = CONFIG.steps[currentStepIndex];
+                    descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
+                }
+                return;
+            }
+            
+            // Find which step this object belongs to
+            const objectStepIndex = getStepIndexForObject(clickedObject);
+            
+            if (objectStepIndex === -1) {
+                // Clicked object is not interactive
+                console.log('Clicked object is not interactive:', clickedObject.name);
+                if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
+                    const stepData = CONFIG.steps[currentStepIndex];
+                    descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
+                }
+                return;
+            }
+            
+            // Check if this is the correct step to advance
+            const expectedStepIndex = currentStepIndex + 1;
+            
+            if (objectStepIndex === expectedStepIndex) {
+                // Correct object clicked - advance!
                 playNextStep();
+            } else if (objectStepIndex < expectedStepIndex) {
+                // Clicked an object from a previous step
+                descText.innerText = 'This step has already been completed. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             } else {
-                // Restart experience
-                resetExperience();
+                // Clicked an object from a future step
+                descText.innerText = 'Complete previous steps first. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             }
         });
 
-        // 2. PLAY FUNCTION
+        // Add hover feedback (optional)
+        if (CONFIG.enableHoverFeedback) {
+            viewer.addEventListener('mousemove', updateHoverFeedback);
+            viewer.addEventListener('touchmove', updateHoverFeedback);
+        }
+
+        // ============================================
+        // PLAYBACK FUNCTIONS
+        // ============================================
+
         function playNextStep() {
             currentStepIndex++;
             const stepData = CONFIG.steps[currentStepIndex];
@@ -271,36 +563,19 @@
             descText.innerText = stepData.desc;
             isAnimating = true;
 
-            // Trigger Animation
-            viewer.animationName = stepData.clip;
-            viewer.play();
-            
-            // Important: We only loop the FINAL step. All others play once.
-            if (currentStepIndex === CONFIG.steps.length - 1) {
-                viewer.loop = true;
-            } else {
-                viewer.loop = false;
-            }
+            // Play the keyframe range
+            playKeyframeRange(stepData);
         }
 
-        // 3. LISTEN FOR COMPLETION
-        viewer.addEventListener('finished', () => {
-            // This fires when a non-looping animation finishes
-            isAnimating = false;
-            
-            // Update UI to prompt user for the next action
-            if (currentStepIndex < CONFIG.steps.length - 1) {
-                descText.innerText = CONFIG.continuePrompt;
-            }
-        });
-
-        // 4. RESET LOGIC
         function resetExperience() {
             currentStepIndex = -1;
             titleText.innerText = CONFIG.resetTitle;
             descText.innerText = CONFIG.resetDesc;
-            viewer.animationName = CONFIG.initialAnimation;
-            viewer.loop = true; // Idle should loop
+            
+            // Reset to first frame
+            viewer.currentTime = frameToTime(1);
+            viewer.pause();
+            isAnimating = false;
         }
 
         // ============================================
@@ -317,7 +592,21 @@
             console.log('Model loaded successfully');
         });
 
+        // ============================================
+        // HELPER: Debug object names
+        // ============================================
+
+        // Uncomment to debug object names:
+        // viewer.addEventListener('load', () => {
+        //     const scene = viewer.getScene();
+        //     console.log('=== All Objects in Model ===');
+        //     scene.traverse((object) => {
+        //         if (object.isMesh) {
+        //             console.log(`Name: "${object.name}", Type: ${object.type}`);
+        //         }
+        //     });
+        // });
+
     </script>
 </body>
 </html>
-

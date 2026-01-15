@@ -9,17 +9,26 @@ This is the most critical part. If the GLB file isn't set up correctly with "Tak
 * Model all your objects (Bowl, Mug, Whisk, Sachet, etc.) in a single scene.
 * **Materials:** Use standard PBR materials (Albedo, Roughness, Normal). Do not use C4D-specific shaders (like Noise or Layer) as they won't export. Bake textures if necessary.
 
-**2. The Animation Strategy (The "Take" System)**
-Instead of one long timeline, you will split your animations into "Clips" using the **Take System**.
+**2. The Animation Strategy (Single Timeline Track)**
 
-* **Open the Take Manager** (Window > Take Manager).
-* **Create the following Takes:**
-* `Idle`: (Frames 0-1) A static pose of the empty bowl/mug.
-* `Step1_Mix`: (e.g., Frames 0-60) Sachet pours powder, water spoon dumps water.
-* `Step2_Whip`: (e.g., Frames 60-120) Whisk spins, liquid morphs into foam.
-* `Step3_Mug`: (e.g., Frames 120-180) Ice falls into the mug, milk rises.
-* `Step4_Transfer`: (e.g., Frames 180-240) Foam blob flies from bowl to mug.
-* `Final_Loop`: (e.g., Frames 240-300) Steam rising, slight rotation of the mug.
+Create a single animation track named `animation_0` with all steps on one timeline:
+
+* **Animation Track:** `animation_0` (30 FPS)
+* **Step 1: The Mix** - Frames 1-80: Nescafé + Water into bowl
+* **Step 2: Whip It** - Frames 80-140: Whisking into foam
+* **Step 3: The Base** - Frames 140-200: Milk into mug
+* **Step 4: Transfer** - Frames 200-240: Bowl into mug
+* **Step 5: Final Touch** - Frames 240-300: Add ice
+
+**Important:** Ensure smooth transitions between steps (last frame of Step 1 matches first frame of Step 2, etc.) to prevent snapping.
+
+**Object Naming:**
+Your 3D objects must be named exactly as follows (case-sensitive):
+* Step 1 triggers: `Nescafe.BTM`, `Nescafe.TOP (Copy)`, `pot`, `handle`
+* Step 2 triggers: `whisk`
+* Step 3 triggers: `jug`
+* Step 4 triggers: `mixing.bowl`
+* Step 5 triggers: `scoop`, `ice.bowl`
 
 
 
@@ -33,7 +42,8 @@ Instead of one long timeline, you will split your animations into "Clips" using 
 
 * **Animation Settings:**
 * **Export Animation:** Checked.
-* **Takes:** Select "Export All Takes" (or manually check the ones you created).
+* **Animation Track:** `animation_0` (or your single animation track name)
+* **Frame Rate:** 30 FPS
 
 
 * Click Export. Name it `nescafe_dalgona.glb`.
@@ -168,34 +178,25 @@ Copy this entire block into your `index.html`. This includes the HTML structure,
         const card = document.querySelector('#info-card');
 
         // GAMEPLAY CONFIGURATION
-        // Map your C4D Take Names to User Instructions here
-        const steps = [
-            { 
-                clip: 'Step1_Mix', 
-                title: 'Step 1: The Mix', 
-                desc: 'Adding Nescafé 3in1 & Water...' 
-            },
-            { 
-                clip: 'Step2_Whip', 
-                title: 'Step 2: Whip It', 
-                desc: 'Whipping into golden foam...' 
-            },
-            { 
-                clip: 'Step3_Mug', 
-                title: 'Step 3: The Base', 
-                desc: 'Pouring fresh milk over ice...' 
-            },
-            { 
-                clip: 'Step4_Transfer', 
-                title: 'Step 4: The Finish', 
-                desc: 'Topping it off with the Dalgona foam!' 
-            },
-            { 
-                clip: 'Final_Loop', 
-                title: 'Ready to Serve', 
-                desc: 'Enjoy your Nescafé Dalgona!' 
-            }
-        ];
+        // Keyframe-based animation with object-specific interactions
+        const CONFIG = {
+            animationName: 'animation_0',
+            fps: 30,
+            steps: [
+                { startFrame: 1, endFrame: 80, title: 'Step 1: The Mix', desc: 'Nescafé + Water into bowl' },
+                { startFrame: 80, endFrame: 140, title: 'Step 2: Whip It', desc: 'Whisking into foam...' },
+                { startFrame: 140, endFrame: 200, title: 'Step 3: The Base', desc: 'Milk into mug...' },
+                { startFrame: 200, endFrame: 240, title: 'Step 4: Transfer', desc: 'Bowl into mug...' },
+                { startFrame: 240, endFrame: 300, title: 'Step 5: Final Touch', desc: 'Add ice...' }
+            ],
+            interactiveObjects: [
+                ['Nescafe.BTM', 'Nescafe.TOP (Copy)', 'pot', 'handle'],
+                ['whisk'],
+                ['jug'],
+                ['mixing.bowl'],
+                ['scoop', 'ice.bowl']
+            ]
+        };
 
         let currentStepIndex = -1; // Starts before the first step
         let isAnimating = false;
@@ -229,9 +230,12 @@ Copy this entire block into your `index.html`. This includes the HTML structure,
             descText.innerText = stepData.desc;
             isAnimating = true;
 
-            // Trigger Animation
-            viewer.animationName = stepData.clip;
+            // Play keyframe range
+            const startTime = stepData.startFrame / CONFIG.fps;
+            const endTime = stepData.endFrame / CONFIG.fps;
+            viewer.currentTime = startTime;
             viewer.play();
+            // Monitor playback until endTime...
             
             // Important: We only loop the FINAL step. All others play once.
             if (currentStepIndex === steps.length - 1) {
@@ -292,6 +296,8 @@ To see the AR button appear, you need **HTTPS** (secure connection) or "Port For
 
 ### Troubleshooting Tips
 
-* **"Animation not playing?"** Check that the `clip: 'Name'` in the JS array matches your C4D Take name *exactly* (case sensitive).
+* **"Animation not playing?"** Check that the animation track name is `animation_0` and frame ranges match your animation (1-80, 80-140, etc.).
+* **"Object not clickable?"** Verify object names in your GLB match exactly: `Nescafe.BTM`, `Nescafe.TOP (Copy)`, `pot`, `handle`, `whisk`, `jug`, `mixing.bowl`, `scoop`, `ice.bowl` (case-sensitive). Use browser console to see all object names.
 * **"Model looks dark?"** Ensure you have lights in your C4D scene (baked) or add `environment-image="legacy"` to the model-viewer tag for default lighting.
-* **"Object snapping back?"** Ensure the first frame of Step 2 matches the last frame of Step 1 in Cinema 4D.
+* **"Object snapping back?"** Ensure the last frame of each step matches the first frame of the next step (e.g., frame 80 should be identical in both Step 1 and Step 2).
+* **"Click not detected?"** Make sure you're clicking directly on the 3D object, not empty space. The object must be visible and not occluded.

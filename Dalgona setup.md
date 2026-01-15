@@ -8,16 +8,27 @@ Instead of swapping 3D models (which causes flickering/loading bars in AR), you 
 
 You will separate the actions into **Animation Clips** (Takes).
 
-**Required Animation List (Cinema 4D Takes):**
+**Required Animation Sequence (Single Timeline Track):**
 
-1. `Idle`: Everything sitting still on the table.
-2. `Step1_Mix`: Water spoon and Sachet pour into the bowl.
-3. `Step2_Whip`: Whisk spins, Foam Morph transitions from Dark to Beige.
-4. `Step3_Mug`: Ice falls, Milk rises in the opaque mug.
-5. `Step4_Transfer`: Foam blob flies from Bowl to Mug.
+The animation uses a single track (`animation_0`) with keyframe spans:
+
+1. **Step 1: The Mix** - Frames 1-80: Nescafé + Water into bowl
+2. **Step 2: Whip It** - Frames 80-140: Whisking into foam
+3. **Step 3: The Base** - Frames 140-200: Milk into mug
+4. **Step 4: Transfer** - Frames 200-240: Bowl into mug
+5. **Step 5: Final Touch** - Frames 240-300: Add ice
+
+**Interactive Objects (Mesh Names):**
+- Step 1: `Nescafe.BTM`, `Nescafe.TOP (Copy)`, `pot`, `handle`
+- Step 2: `whisk`
+- Step 3: `jug`
+- Step 4: `mixing.bowl`
+- Step 5: `scoop`, `ice.bowl`
 
 **C4D Export Tip:**
-Use the **Take System** in Cinema 4D. Create a specific Take for each animation step. When exporting to **glTF/GLB**, ensure "Export Takes" is checked. This will embed all animations as selectable "Clips" inside the single file.
+Create a single animation track (`animation_0`) with all steps on one timeline. Ensure frame transitions are smooth (last frame of one step matches first frame of next). When exporting to **glTF/GLB**, ensure "Export Animation" is checked. The code will control playback using keyframe ranges.
+
+**Important:** Object names in your GLB must match exactly (case-sensitive): `Nescafe.BTM`, `Nescafe.TOP (Copy)`, `pot`, `handle`, `whisk`, `jug`, `mixing.bowl`, `scoop`, `ice.bowl`
 
 ---
 
