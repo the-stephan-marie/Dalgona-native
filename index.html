@@ -116,6 +116,181 @@
 
     <script type="module">
         // ============================================
+        // ON-SCREEN CONSOLE FOR MOBILE DEBUGGING
+        // ============================================
+        
+        function createOnScreenConsole() {
+            const consoleDiv = document.createElement('div');
+            consoleDiv.id = 'mobile-console';
+            consoleDiv.style.cssText = `
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                max-height: 200px;
+                overflow-y: auto;
+                background: rgba(0, 0, 0, 0.95);
+                color: #0f0;
+                font-family: 'Courier New', monospace;
+                font-size: 11px;
+                padding: 8px;
+                z-index: 10000;
+                display: none;
+                border-top: 2px solid #0f0;
+                box-shadow: 0 -2px 10px rgba(0, 255, 0, 0.3);
+            `;
+            
+            // Add close button
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '✕';
+            closeBtn.style.cssText = `
+                position: absolute;
+                top: 5px;
+                right: 5px;
+                background: #f00;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                width: 24px;
+                height: 24px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: bold;
+                z-index: 10001;
+            `;
+            closeBtn.onclick = () => {
+                consoleDiv.style.display = 'none';
+            };
+            consoleDiv.appendChild(closeBtn);
+            
+            // Add clear button
+            const clearBtn = document.createElement('button');
+            clearBtn.textContent = 'Clear';
+            clearBtn.style.cssText = `
+                position: absolute;
+                top: 5px;
+                right: 35px;
+                background: #333;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                padding: 2px 8px;
+                cursor: pointer;
+                font-size: 10px;
+                z-index: 10001;
+            `;
+            clearBtn.onclick = () => {
+                const logs = consoleDiv.querySelectorAll('div:not(button)');
+                logs.forEach(log => log.remove());
+            };
+            consoleDiv.appendChild(clearBtn);
+            
+            document.body.appendChild(consoleDiv);
+            
+            // Store original console methods
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+            const originalInfo = console.info;
+            
+            function addToScreen(type, ...args) {
+                const consoleDiv = document.getElementById('mobile-console');
+                if (!consoleDiv) return;
+                
+                const message = args.map(arg => {
+                    if (arg === null) return 'null';
+                    if (arg === undefined) return 'undefined';
+                    if (typeof arg === 'object') {
+                        try {
+                            return JSON.stringify(arg, null, 2);
+                        } catch (e) {
+                            return String(arg);
+                        }
+                    }
+                    return String(arg);
+                }).join(' ');
+                
+                const logEntry = document.createElement('div');
+                logEntry.style.cssText = `
+                    padding: 3px 0;
+                    border-bottom: 1px solid #222;
+                    word-wrap: break-word;
+                    color: ${type === 'error' ? '#ff4444' : type === 'warn' ? '#ffaa00' : type === 'info' ? '#00aaff' : '#00ff00'};
+                    white-space: pre-wrap;
+                `;
+                
+                const timestamp = new Date().toLocaleTimeString();
+                logEntry.textContent = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+                consoleDiv.appendChild(logEntry);
+                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+                
+                // Auto-show console for errors and warnings
+                if (type === 'error' || type === 'warn') {
+                    consoleDiv.style.display = 'block';
+                }
+            }
+            
+            // Override console methods
+            console.log = function(...args) {
+                originalLog.apply(console, args);
+                addToScreen('log', ...args);
+            };
+            
+            console.error = function(...args) {
+                originalError.apply(console, args);
+                addToScreen('error', ...args);
+            };
+            
+            console.warn = function(...args) {
+                originalWarn.apply(console, args);
+                addToScreen('warn', ...args);
+            };
+            
+            console.info = function(...args) {
+                if (originalInfo) originalInfo.apply(console, args);
+                addToScreen('info', ...args);
+            };
+            
+            // Toggle console with triple tap
+            let tapCount = 0;
+            let tapTimer = null;
+            document.addEventListener('touchstart', (e) => {
+                // Don't trigger on UI elements
+                if (e.target.tagName === 'BUTTON' || e.target.closest('#ui-layer')) {
+                    return;
+                }
+                
+                tapCount++;
+                clearTimeout(tapTimer);
+                tapTimer = setTimeout(() => {
+                    if (tapCount === 3) {
+                        const consoleDiv = document.getElementById('mobile-console');
+                        if (consoleDiv) {
+                            consoleDiv.style.display = consoleDiv.style.display === 'none' ? 'block' : 'none';
+                        }
+                    }
+                    tapCount = 0;
+                }, 400);
+            });
+            
+            // Also allow keyboard toggle (for desktop testing)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === '`' && e.ctrlKey) {
+                    e.preventDefault();
+                    const consoleDiv = document.getElementById('mobile-console');
+                    if (consoleDiv) {
+                        consoleDiv.style.display = consoleDiv.style.display === 'none' ? 'block' : 'none';
+                    }
+                }
+            });
+            
+            console.log('On-screen console initialized. Triple-tap to toggle, or press Ctrl+`');
+        }
+        
+        // Initialize console immediately
+        createOnScreenConsole();
+        
+        // ============================================
         // CONFIGURATION: Keyframe-based animation with object-specific taps
         // ============================================
         
