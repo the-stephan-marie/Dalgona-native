@@ -96,7 +96,7 @@
         camera-controls
         disable-tap
         shadow-intensity="1.2"
-        environment-image="neutral" 
+        environment-image="assets/ostrich_road_1k.exr" 
         tone-mapping="commerce"
         animation-name="animation_0"
         autoplay="false">
@@ -529,22 +529,32 @@
             mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
             
-            // Try to access model-viewer's Three.js camera and scene
-            let scene = null;
-            let threeCamera = null;
+            // Get only interactive meshes (exclude ground, table, etc.)
+            const interactiveMeshes = hierarchyNodes
+                .map(node => node.mesh)
+                .filter(mesh => {
+                    if (!mesh || !mesh.isMesh) return false;
+                    // Filter out non-interactive object names (case-insensitive)
+                    const name = (mesh.name || '').toLowerCase();
+                    const excludeNames = ['plane', 'ground', 'floor', 'table', 'base', 'surface'];
+                    return !excludeNames.some(exclude => name === exclude || name.includes(exclude));
+                });
             
-            // Access through renderRoot (model-viewer's internal structure)
+            if (interactiveMeshes.length === 0) {
+                return null;
+            }
+            
+            // Try to sync camera with model-viewer's camera
+            let threeCamera = null;
             if (viewer.renderRoot) {
                 const renderer = viewer.renderRoot.querySelector('canvas')?.__THREE__;
-                if (renderer && renderer.scene) {
-                    scene = renderer.scene;
-                    threeCamera = renderer.camera || renderer.scene.children.find(child => child.isCamera);
+                if (renderer) {
+                    threeCamera = renderer.camera || renderer.scene?.children.find(child => child.isCamera);
                 }
             }
             
-            // If we found the scene, use it; otherwise use hierarchy nodes
-            if (scene && threeCamera) {
-                // Update camera from model-viewer's camera
+            // Update camera to match model-viewer's camera
+            if (threeCamera) {
                 camera.position.copy(threeCamera.position);
                 camera.quaternion.copy(threeCamera.quaternion);
                 camera.fov = threeCamera.fov;
@@ -553,65 +563,35 @@
                 camera.far = threeCamera.far;
                 camera.updateProjectionMatrix();
                 camera.updateMatrixWorld();
-                
-                // Update raycaster
-                raycaster.setFromCamera(mouse, camera);
-                
-                // Perform raycasting on the entire scene
-                const intersects = raycaster.intersectObject(scene, true);
-                
-                if (intersects.length > 0) {
-                    const hitObject = intersects[0].object;
-                    // Find which node this object belongs to
-                    // Check if it's directly a mesh from our hierarchy
-                    const hitNode = hierarchyNodes.find(node => {
-                        if (node.mesh === hitObject) return true;
-                        // Also check parent chain
-                        let parent = hitObject.parent;
-                        while (parent) {
-                            if (node.mesh === parent) return true;
-                            parent = parent.parent;
-                        }
-                        return false;
-                    });
-                    
-                    if (hitNode) {
-                        return hitNode.name;
-                    }
-                    
-                    // Try to get name from the object itself
-                    if (hitObject.name) {
-                        return hitObject.name;
-                    }
-                }
             } else {
-                // Fallback: use hierarchy nodes with meshes
-                // Update camera properties
+                // Fallback: update aspect ratio
                 camera.aspect = viewer.clientWidth / viewer.clientHeight;
                 camera.updateProjectionMatrix();
+            }
+            
+            // Update raycaster
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Perform raycasting ONLY on interactive meshes
+            const intersects = raycaster.intersectObjects(interactiveMeshes, true);
+            
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object;
                 
-                // Update raycaster
-                raycaster.setFromCamera(mouse, camera);
-                
-                // Get all meshes from hierarchy nodes
-                const meshes = hierarchyNodes
-                    .map(node => node.mesh)
-                    .filter(mesh => mesh && mesh.isMesh);
-                
-                if (meshes.length === 0) {
-                    return null;
-                }
-                
-                // Perform raycasting
-                const intersects = raycaster.intersectObjects(meshes, true);
-                
-                if (intersects.length > 0) {
-                    const hitMesh = intersects[0].object;
-                    // Find which node this mesh belongs to
-                    const hitNode = hierarchyNodes.find(node => node.mesh === hitMesh);
-                    if (hitNode) {
-                        return hitNode.name;
+                // Find which node this mesh belongs to
+                const hitNode = hierarchyNodes.find(node => {
+                    if (node.mesh === hitMesh) return true;
+                    // Check parent chain
+                    let parent = hitMesh.parent;
+                    while (parent) {
+                        if (node.mesh === parent) return true;
+                        parent = parent.parent;
                     }
+                    return false;
+                });
+                
+                if (hitNode) {
+                    return hitNode.name;
                 }
             }
             
