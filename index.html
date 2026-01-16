@@ -237,25 +237,75 @@
                 // Set initial time to frame 1
                 viewer.currentTime = frameToTime(1);
                 viewer.pause();
-            }, 100);
+            }, 500); // Increased delay to ensure model is fully loaded
+        });
+        
+        // Also listen for scene-graph-ready event if available
+        viewer.addEventListener('scene-graph-ready', () => {
+            console.log('Scene graph ready event fired');
+            setupRaycasting();
         });
 
         function setupRaycasting() {
-            // Get Three.js scene from model-viewer's model property
-            const gltf = viewer.model;
+            // Try multiple ways to access the scene from model-viewer
+            let gltf = null;
+            let potentialScene = null;
             
-            if (!gltf) {
-                console.error('Could not access Three.js model. Model not loaded yet.');
-                return;
+            // Method 1: Try viewer.model
+            gltf = viewer.model;
+            if (gltf && gltf.scene) {
+                potentialScene = gltf.scene;
             }
             
-            // The scene should be at gltf.scene
-            scene = gltf.scene;
+            // Method 2: Try viewer.scene (some versions expose this)
+            if (!potentialScene && viewer.scene) {
+                potentialScene = viewer.scene;
+            }
+            
+            // Method 3: Try accessing through renderer
+            if (!potentialScene && viewer.renderer) {
+                const renderer = viewer.renderer;
+                if (renderer.scene) {
+                    potentialScene = renderer.scene;
+                }
+            }
+            
+            // Method 4: Try scene-graph API
+            if (!potentialScene && viewer.sceneGraph) {
+                const sceneGraph = viewer.sceneGraph;
+                if (sceneGraph.scene) {
+                    potentialScene = sceneGraph.scene;
+                } else if (sceneGraph.model && sceneGraph.model.scene) {
+                    potentialScene = sceneGraph.model.scene;
+                }
+            }
+            
+            // Debug: Log what we found
+            console.log('viewer.model:', viewer.model);
+            console.log('viewer.scene:', viewer.scene);
+            console.log('viewer.renderer:', viewer.renderer);
+            console.log('viewer.sceneGraph:', viewer.sceneGraph);
+            console.log('potentialScene:', potentialScene);
+            
+            if (!potentialScene) {
+                console.error('Could not find scene. Available viewer properties:', Object.keys(viewer));
+                // Try to get scene from model property structure
+                if (gltf) {
+                    console.log('gltf structure:', gltf);
+                    console.log('gltf type:', typeof gltf);
+                    console.log('gltf constructor:', gltf.constructor?.name);
+                    // Try accessing scene directly if gltf IS the scene
+                    if (typeof gltf.traverse === 'function') {
+                        potentialScene = gltf;
+                    }
+                }
+            }
+            
+            scene = potentialScene;
             
             // Verify scene is valid and has traverse method
             if (!scene) {
-                console.error('Could not access Three.js scene from gltf.scene');
-                console.log('gltf keys:', Object.keys(gltf));
+                console.error('Could not access Three.js scene from any method');
                 return;
             }
             
@@ -266,32 +316,9 @@
                 return;
             }
             
-            // Get Three.js classes from the first mesh we find
-            // This avoids importing Three.js separately
-            let THREE_Namespace = null;
-            scene.traverse((object) => {
-                if (object.isMesh && !THREE_Namespace) {
-                    // Get the Mesh constructor, then access its parent module
-                    const MeshClass = object.constructor;
-                    // THREE classes are typically accessible through the constructor
-                    // Try to find Vector2, Raycaster, etc. in the namespace
-                    if (MeshClass.constructor && MeshClass.constructor.Vector2) {
-                        THREE_Namespace = MeshClass.constructor;
-                    } else {
-                        // Try accessing through the prototype chain
-                        const proto = Object.getPrototypeOf(MeshClass);
-                        if (proto && proto.constructor && proto.constructor.Vector2) {
-                            THREE_Namespace = proto.constructor;
-                        }
-                    }
-                }
-            });
-            
-            // If we found THREE namespace, use it
-            if (THREE_Namespace && THREE_Namespace.Vector2) {
-                window.THREE = THREE_Namespace;
-            } else {
-                // Fallback: dynamically import Three.js (will cause warning but will work)
+            // Import Three.js dynamically (we need it for raycasting anyway)
+            // This will cause a warning about multiple instances, but it's necessary
+            if (!window.THREE) {
                 import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js').then((THREE) => {
                     window.THREE = THREE;
                     initializeRaycasting();
