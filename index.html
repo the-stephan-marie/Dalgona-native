@@ -91,11 +91,9 @@
     <model-viewer 
         id="ar-viewer"
         src="assets/Dalgona-OneTake_0001.glb"
-        ios-src="assets/model.usdz"
         ar
-        ar-modes="webxr scene-viewer quick-look"
+        ar-modes="scene-viewer quick-look webxr"
         camera-controls
-        disable-zoom
         disable-tap
         shadow-intensity="1.2"
         environment-image="neutral" 
@@ -300,7 +298,8 @@
             modelPath: 'assets/Dalgona-OneTake_0001.glb',
             
             // Path to iOS USDZ format (optional, for better iOS support)
-            iosModelPath: 'assets/model.usdz',
+            // Note: USDZ file not present, iOS will use GLB
+            iosModelPath: null,
             
             // Animation name (single track)
             animationName: 'animation_0',
@@ -384,8 +383,11 @@
 
         // Set model paths from config
         viewer.src = CONFIG.modelPath;
+        // Only set iOS source if it exists (USDZ provides better iOS Quick Look support)
         if (CONFIG.iosModelPath) {
             viewer.setAttribute('ios-src', CONFIG.iosModelPath);
+        } else {
+            console.log('No USDZ file specified - iOS will use GLB (may have limitations)');
         }
         viewer.animationName = CONFIG.animationName;
         viewer.autoplay = false;
@@ -404,8 +406,7 @@
         let hierarchyNodes = []; // Store hierarchy nodes with meshes
         let THREE = null; // Will store Three.js reference
         let raycaster = null;
-        let scene = null; // Store the Three.js scene
-        let camera = null; // Store the camera reference
+        let camera = null;
         
         // Initialize after model loads
         viewer.addEventListener('load', () => {
@@ -457,97 +458,19 @@
             const hierarchy = viewer.model[hierarchySym];
             hierarchyNodes = hierarchy.filter(node => node.mesh); // Only nodes with meshes
             
-            console.log(`Found ${hierarchyNodes.length} nodes with meshes`);
-            
             // Build flexible node-to-step mapping
             buildFlexibleNodeMapping(hierarchyNodes);
-            
-            // Access the scene from viewer.model
-            // Try to find the scene through various Symbol properties
-            const sceneSym = symbols.find(s => {
-                const symStr = s.toString();
-                return symStr.includes('scene') || symStr.includes('roots');
-            });
-            
-            if (sceneSym) {
-                const roots = viewer.model[sceneSym];
-                if (Array.isArray(roots) && roots.length > 0) {
-                    // The first root is usually the scene
-                    scene = roots[0];
-                    console.log('Found scene through roots Symbol');
-                }
-            }
-            
-            // If we didn't find the scene, try accessing it through renderRoot
-            if (!scene && viewer.renderRoot) {
-                // Try to find Three.js scene in renderRoot
-                const findScene = (obj) => {
-                    if (!obj) return null;
-                    if (obj.type === 'Scene' || (obj.isScene && obj.isScene())) return obj;
-                    if (obj.children) {
-                        for (let child of obj.children) {
-                            const found = findScene(child);
-                            if (found) return found;
-                        }
-                    }
-                    return null;
-                };
-                scene = findScene(viewer.renderRoot);
-                if (scene) console.log('Found scene through renderRoot');
-            }
             
             // Initialize raycasting
             raycaster = new THREE.Raycaster();
             
-            // Try to get camera from viewer's renderer
-            // Access through renderRoot or model-viewer's internal renderer
-            if (viewer.renderRoot) {
-                // Try to find camera in renderRoot
-                const findCamera = (obj) => {
-                    if (!obj) return null;
-                    if (obj.type === 'PerspectiveCamera' || (obj.isPerspectiveCamera && obj.isPerspectiveCamera())) return obj;
-                    if (obj.camera) return obj.camera;
-                    if (obj.children) {
-                        for (let child of obj.children) {
-                            const found = findCamera(child);
-                            if (found) return found;
-                        }
-                    }
-                    return null;
-                };
-                camera = findCamera(viewer.renderRoot);
-                if (camera) {
-                    console.log('Found camera through renderRoot');
-                }
-            }
-            
-            // If we still don't have a camera, try accessing through viewer's internal properties
-            if (!camera && viewer.model) {
-                // Check if there's a camera Symbol
-                const cameraSym = symbols.find(s => s.toString().includes('camera'));
-                if (cameraSym) {
-                    camera = viewer.model[cameraSym];
-                    if (camera) console.log('Found camera through Symbol');
-                }
-            }
-            
-            // Fallback: create a camera with model-viewer's FOV
-            if (!camera) {
-                const fov = viewer.getFieldOfView ? viewer.getFieldOfView() : 45;
-                camera = new THREE.PerspectiveCamera(
-                    fov,
-                    viewer.clientWidth / viewer.clientHeight,
-                    0.1,
-                    1000
-                );
-                console.log('Created fallback camera');
-            }
-            
-            console.log('Hit detection initialized', {
-                hasScene: !!scene,
-                hasCamera: !!camera,
-                nodeCount: hierarchyNodes.length
-            });
+            // Create camera for raycasting
+            camera = new THREE.PerspectiveCamera(
+                75,
+                viewer.clientWidth / viewer.clientHeight,
+                0.1,
+                1000
+            );
         }
         
         function buildFlexibleNodeMapping(nodes) {
@@ -576,148 +499,57 @@
                             // Map both the config name and actual node name
                             nodeToStepMap.set(node.name, stepIndex);
                             nodeToStepMap.set(normalized, stepIndex);
-                            console.log(`Mapped "${node.name}" -> Step ${stepIndex + 1}`);
                         }
                     });
                 });
             });
             
-            console.log('Flexible node mapping built:', Array.from(nodeToStepMap.entries()));
         }
         
         // Function to find which node was hit using raycasting
         function findHitNode(clientX, clientY) {
             if (!raycaster || !camera || !hierarchyNodes.length) {
-                console.warn('Raycasting prerequisites not met:', {
-                    hasRaycaster: !!raycaster,
-                    hasCamera: !!camera,
-                    hasNodes: hierarchyNodes.length > 0
-                });
                 return null;
             }
             
-            // Get normalized device coordinates (NDC)
+            // Get normalized device coordinates
             const rect = viewer.getBoundingClientRect();
             const mouse = new THREE.Vector2();
             mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
             
-            console.log('Raycasting with coordinates:', {
-                clientX, clientY,
-                rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                mouseNDC: { x: mouse.x, y: mouse.y }
-            });
-            
-            // Update camera properties from model-viewer's camera if available
-            // Try to sync camera from viewer's internal state
-            if (viewer.getCameraOrbit) {
-                const orbit = viewer.getCameraOrbit();
-                const target = viewer.getCameraTarget();
-                const fov = viewer.getFieldOfView ? viewer.getFieldOfView() : 45;
-                
-                // Update camera FOV
-                camera.fov = fov;
-                camera.aspect = rect.width / rect.height;
-                camera.updateProjectionMatrix();
-                
-                // Calculate camera position from orbit
-                const radius = orbit.radius || 1;
-                const theta = orbit.theta || 0; // azimuth
-                const phi = orbit.phi || Math.PI / 2; // polar angle
-                
-                // Convert spherical to cartesian
-                const x = radius * Math.sin(phi) * Math.sin(theta);
-                const y = radius * Math.cos(phi);
-                const z = radius * Math.sin(phi) * Math.cos(theta);
-                
-                camera.position.set(
-                    target.x + x,
-                    target.y + y,
-                    target.z + z
-                );
-                camera.lookAt(target.x, target.y, target.z);
+            // Update camera to match viewer's camera
+            // Get camera from viewer if available, otherwise use default
+            if (viewer.camera) {
+                // Copy camera properties
+                camera.position.copy(viewer.camera.position);
+                camera.quaternion.copy(viewer.camera.quaternion);
                 camera.updateMatrixWorld();
-                
-                console.log('Camera synced:', {
-                    position: camera.position,
-                    target: target,
-                    fov: fov,
-                    orbit: orbit
-                });
             }
             
             // Update raycaster
             raycaster.setFromCamera(mouse, camera);
             
-            // Collect all meshes from hierarchy nodes
-            const meshes = [];
-            hierarchyNodes.forEach(node => {
-                if (node.mesh) {
-                    if (node.mesh.isMesh) {
-                        meshes.push(node.mesh);
-                    } else if (node.mesh.children) {
-                        // If mesh has children, traverse them
-                        node.mesh.traverse((child) => {
-                            if (child.isMesh) {
-                                meshes.push(child);
-                            }
-                        });
-                    }
-                }
-            });
-            
-            console.log(`Raycasting against ${meshes.length} meshes`);
+            // Get all meshes from hierarchy nodes
+            const meshes = hierarchyNodes
+                .map(node => node.mesh)
+                .filter(mesh => mesh && mesh.isMesh);
             
             if (meshes.length === 0) {
-                console.warn('No meshes found for raycasting');
+                console.warn('No meshes found in hierarchy nodes');
                 return null;
             }
             
             // Perform raycasting
             const intersects = raycaster.intersectObjects(meshes, true);
             
-            console.log(`Found ${intersects.length} intersections`);
-            
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object;
-                console.log('Hit mesh:', hitMesh.name || 'unnamed', hitMesh);
-                
                 // Find which node this mesh belongs to
-                // Check direct mesh match first
-                let hitNode = hierarchyNodes.find(node => node.mesh === hitMesh);
-                
-                // If not found, check if mesh is a child of any node's mesh
-                if (!hitNode) {
-                    hitNode = hierarchyNodes.find(node => {
-                        if (!node.mesh) return false;
-                        let found = false;
-                        node.mesh.traverse((child) => {
-                            if (child === hitMesh) found = true;
-                        });
-                        return found;
-                    });
-                }
-                
-                // Also check by mesh name
-                if (!hitNode && hitMesh.name) {
-                    hitNode = hierarchyNodes.find(node => {
-                        if (!node.mesh) return false;
-                        let found = false;
-                        node.mesh.traverse((child) => {
-                            if (child.name === hitMesh.name) found = true;
-                        });
-                        return found;
-                    });
-                }
-                
+                const hitNode = hierarchyNodes.find(node => node.mesh === hitMesh);
                 if (hitNode) {
-                    console.log('✓ Hit node:', hitNode.name);
                     return hitNode.name;
-                } else {
-                    console.warn('Hit mesh but could not find corresponding node');
                 }
-            } else {
-                console.log('No intersections found');
             }
             
             return null;
@@ -817,9 +649,53 @@
         // Handle AR button visibility and errors
         const arButton = document.querySelector('#ar-button');
         
-        // Listen for AR status changes
+        // Listen for AR status changes with detailed logging
         viewer.addEventListener('ar-status', (event) => {
-            console.log('AR status:', event.detail.status);
+            const status = event.detail.status;
+            const mode = event.detail.mode;
+            
+            console.log('AR status:', status);
+            console.log('AR mode:', mode);
+            console.log('AR status detail:', event.detail);
+            
+            if (status === 'failed') {
+                console.error('=== AR INITIALIZATION FAILED ===');
+                console.log('Failed AR mode:', mode);
+                console.log('AR modes configured:', viewer.arModes);
+                console.log('AR available:', viewer.arAvailable);
+                console.log('AR supported:', viewer.arSupported);
+                console.log('Model loaded:', viewer.loaded);
+                console.log('Model source:', viewer.src);
+                console.log('iOS source:', viewer.iosSrc);
+                console.log('User agent:', navigator.userAgent);
+                console.log('Is HTTPS:', location.protocol === 'https:');
+                
+                // Check for common issues
+                if (!viewer.loaded) {
+                    console.error('❌ Model not loaded - AR cannot initialize');
+                }
+                if (!viewer.arSupported) {
+                    console.error('❌ AR not supported on this device/browser');
+                }
+                if (viewer.arModes && viewer.arModes.length === 0) {
+                    console.error('❌ No AR modes available');
+                }
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                    console.error('❌ AR requires HTTPS (except localhost)');
+                }
+                if (mode === 'quick-look' && !viewer.iosSrc) {
+                    console.warn('⚠️ Quick Look requires USDZ file for iOS');
+                }
+                if (mode === 'scene-viewer') {
+                    console.log('Scene Viewer failed - checking Android compatibility');
+                    console.log('Android version check:', /Android/.test(navigator.userAgent));
+                }
+                console.log('=== END AR FAILURE DIAGNOSTICS ===');
+            } else if (status === 'not-presenting') {
+                console.log('AR available but not active');
+            } else if (status === 'presenting') {
+                console.log('AR is active!');
+            }
         });
         
         // Catch AR launch errors (like the Intent URL error on desktop)
@@ -834,9 +710,34 @@
         
         // Check AR availability after model loads
         viewer.addEventListener('load', () => {
+            console.log('Model loaded, checking AR availability...');
+            console.log('AR available:', viewer.arAvailable);
+            console.log('AR supported:', viewer.arSupported);
+            console.log('AR modes:', viewer.arModes);
+            console.log('Model loaded:', viewer.loaded);
+            console.log('Model source:', viewer.src);
+            console.log('iOS source:', viewer.iosSrc);
+            
             setTimeout(() => {
                 if (!viewer.arAvailable && !isMobileDevice()) {
                     arButton.style.display = 'none';
+                }
+                
+                // Log AR capabilities
+                if (isMobileDevice()) {
+                    console.log('Mobile device detected');
+                    console.log('AR available:', viewer.arAvailable);
+                    console.log('AR supported:', viewer.arSupported);
+                    
+                    if (!viewer.arAvailable) {
+                        console.warn('AR not available on this mobile device');
+                        console.log('Possible reasons:');
+                        console.log('1. Browser does not support AR');
+                        console.log('2. Model file too large');
+                        console.log('3. Missing USDZ file (for iOS)');
+                        console.log('4. Camera permissions not granted');
+                        console.log('5. Device does not support AR');
+                    }
                 }
             }, 1000);
         });
@@ -868,7 +769,7 @@
             });
         });
 
-        // OBJECT-SPECIFIC CLICK HANDLER USING MODEL-VIEWER'S CLICK EVENT
+        // OBJECT-SPECIFIC CLICK HANDLER USING RAYCASTING
         viewer.addEventListener('click', (event) => {
             // Ignore if animating (unless it's a looping step)
             if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) return;
@@ -876,122 +777,11 @@
             // Ignore AR button clicks
             if (event.target.id === 'ar-button') return;
             
-            // Log the ENTIRE event object to see what's available
-            console.log('=== CLICK EVENT DEBUG ===');
-            console.log('Full event object:', event);
-            console.log('event.type:', event.type);
-            console.log('event.detail:', event.detail);
-            console.log('event.detail type:', typeof event.detail);
-            console.log('event.target:', event.target);
-            console.log('event.target.id:', event.target?.id);
-            console.log('event.target.tagName:', event.target?.tagName);
-            console.log('All event properties:', Object.keys(event));
-            
-            // Try accessing hit information from various possible locations
+            // Use raycasting to find hit node
             let nodeName = null;
-            
-            // Method 1: Check event.detail (but it's showing as 1, so might not be here)
-            if (event.detail && typeof event.detail === 'object') {
-                console.log('event.detail is an object, checking properties...');
-                console.log('event.detail.hit:', event.detail.hit);
-                console.log('event.detail.node:', event.detail.node);
-                console.log('event.detail.material:', event.detail.material);
-                
-                nodeName = event.detail.hit?.node?.name || 
-                           event.detail.node?.name || 
-                           event.detail.nodeName ||
-                           event.detail.name ||
-                           event.detail.hit?.name;
-            }
-            
-            // Method 2: Check if model-viewer has a queryHit method
-            if (!nodeName && typeof viewer.queryHit === 'function') {
-                console.log('Trying viewer.queryHit...');
-                try {
-                    const hit = viewer.queryHit(event.clientX, event.clientY);
-                    console.log('queryHit result:', hit);
-                    if (hit) {
-                        nodeName = hit.node?.name || hit.nodeName || hit.name;
-                    }
-                } catch (e) {
-                    console.log('queryHit error:', e);
-                }
-            }
-            
-            // Method 3: Check event.target for model-viewer specific properties
-            if (!nodeName && event.target) {
-                console.log('Checking event.target properties...');
-                console.log('event.target properties:', Object.keys(event.target));
-                if (event.target.modelViewer) {
-                    const mv = event.target.modelViewer;
-                    console.log('modelViewer properties:', Object.keys(mv));
-                }
-            }
-            
-            // Method 4: Check if there's hit information in the event's coordinates
-            if (!nodeName) {
-                console.log('Checking for hit info via coordinates...');
-                console.log('event.clientX:', event.clientX);
-                console.log('event.clientY:', event.clientY);
-                // Try to see if model-viewer exposes a way to query hits
-            }
-            
-            // Method 5: Access Symbol properties to get node hierarchy
-            if (!nodeName && viewer.model) {
-                console.log('Checking viewer.model Symbol properties...');
-                const symbols = Object.getOwnPropertySymbols(viewer.model);
-                console.log('Found', symbols.length, 'Symbol properties');
-                
-                // Find and access hierarchy Symbol
-                const hierarchySym = symbols.find(s => s.toString().includes('hierarchy'));
-                if (hierarchySym) {
-                    try {
-                        const hierarchy = viewer.model[hierarchySym];
-                        console.log('Hierarchy accessed:', Array.isArray(hierarchy) ? `Array(${hierarchy.length})` : typeof hierarchy);
-                        
-                        if (Array.isArray(hierarchy)) {
-                            console.log('Hierarchy contains', hierarchy.length, 'nodes');
-                            
-                            // Log first few nodes to see structure
-                            hierarchy.slice(0, 10).forEach((node, index) => {
-                                console.log(`Node ${index}:`, {
-                                    name: node?.name,
-                                    type: node?.type,
-                                    keys: Object.keys(node || {})
-                                });
-                            });
-                            
-                            // Store hierarchy for potential use
-                            window.modelHierarchy = hierarchy;
-                        }
-                    } catch (e) {
-                        console.error('Error accessing hierarchy:', e);
-                    }
-                }
-                
-                // Check for primitives Symbol (might contain mesh info)
-                const primitivesSym = symbols.find(s => s.toString().includes('primitives'));
-                if (primitivesSym) {
-                    try {
-                        const primitives = viewer.model[primitivesSym];
-                        console.log('Primitives:', Array.isArray(primitives) ? `Array(${primitives.length})` : typeof primitives);
-                    } catch (e) {
-                        console.error('Error accessing primitives:', e);
-                    }
-                }
-            }
-            
-            // Method 6: Use raycasting with hierarchy nodes
-            if (!nodeName && raycaster && hierarchyNodes.length > 0) {
-                console.log('Attempting raycasting with hierarchy nodes...');
+            if (raycaster && hierarchyNodes.length > 0) {
                 nodeName = findHitNode(event.clientX, event.clientY);
-                if (nodeName) {
-                    console.log('✓ Found node via raycasting:', nodeName);
-                }
             }
-            
-            console.log('Final resolved node name:', nodeName);
-            console.log('=== END CLICK DEBUG ===');
             
             if (!nodeName) {
                 // Clicked on empty space - show feedback
@@ -999,7 +789,6 @@
                     const stepData = CONFIG.steps[currentStepIndex];
                     descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
                 }
-                console.warn('No node name detected. Check console for event structure.');
                 return;
             }
             
@@ -1008,7 +797,6 @@
             
             if (objectStepIndex === -1) {
                 // Clicked node is not interactive
-                console.log('Clicked node is not interactive:', nodeName);
                 if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
                     const stepData = CONFIG.steps[currentStepIndex];
                     descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
@@ -1031,14 +819,6 @@
             }
         });
 
-        // Also try listening to 'select' event if model-viewer provides it
-        viewer.addEventListener('select', (event) => {
-            console.log('=== SELECT EVENT DEBUG ===');
-            console.log('Select event fired:', event);
-            console.log('Select event detail:', event.detail);
-            console.log('Select event target:', event.target);
-            console.log('=== END SELECT DEBUG ===');
-        });
 
         // ============================================
         // PLAYBACK FUNCTIONS
