@@ -347,13 +347,14 @@
                 }
             ],
             
-            // Object names that trigger each step (must match GLB mesh names)
+            // Object names that trigger each step (will be matched flexibly against GLB node names)
+            // Note: Matching is flexible - handles dots/underscores, spaces/underscores, case variations
             interactiveObjects: [
-                ['Nescafe.BTM', 'Nescafe.TOP (Copy)', 'pot', 'handle'],  // Step 1
+                ['NescafeBTM', 'NescafeTOP_(Copy)', 'NescafeTOP', 'teapot', 'pot', 'handle'],  // Step 1
                 ['whisk'],                                                // Step 2
                 ['jug'],                                                  // Step 3
-                ['mixing.bowl'],                                          // Step 4
-                ['scoop', 'ice.bowl']                                     // Step 5
+                ['mixingbowl', 'mixing.bowl'],                            // Step 4
+                ['scoop', 'icebowl', 'ice.bowl']                          // Step 5
             ],
             
             // Welcome message
@@ -397,8 +398,12 @@
         // MODEL-VIEWER CLICK EVENT SETUP
         // ============================================
         
-        // Map of node names to step indices
+        // Map of node names to step indices (with flexible matching)
         let nodeToStepMap = new Map();
+        let hierarchyNodes = []; // Store hierarchy nodes with meshes
+        let THREE = null; // Will store Three.js reference
+        let raycaster = null;
+        let camera = null;
         
         // Initialize after model loads
         viewer.addEventListener('load', () => {
@@ -406,26 +411,153 @@
             viewer.currentTime = frameToTime(1);
             viewer.pause();
             
-            // Build node-to-step mapping
-            buildNodeMapping();
+            // Access hierarchy and build mappings
+            setupHitDetection();
         });
         
         // Also listen for scene-graph-ready event
         viewer.addEventListener('scene-graph-ready', () => {
             console.log('Scene graph ready');
-            buildNodeMapping();
+            setupHitDetection();
         });
         
-        function buildNodeMapping() {
-            // Build a map of node names to step indices
+        function setupHitDetection() {
+            // Import Three.js for raycasting
+            if (!window.THREE) {
+                import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js').then((THREE_Module) => {
+                    window.THREE = THREE_Module;
+                    THREE = THREE_Module;
+                    initializeHitDetection();
+                }).catch((err) => {
+                    console.error('Failed to import Three.js:', err);
+                });
+            } else {
+                THREE = window.THREE;
+                initializeHitDetection();
+            }
+        }
+        
+        function initializeHitDetection() {
+            if (!THREE) {
+                console.error('Three.js not available');
+                return;
+            }
+            
+            // Access hierarchy from viewer.model
+            const symbols = Object.getOwnPropertySymbols(viewer.model);
+            const hierarchySym = symbols.find(s => s.toString().includes('hierarchy'));
+            
+            if (!hierarchySym) {
+                console.error('Could not find hierarchy Symbol');
+                return;
+            }
+            
+            const hierarchy = viewer.model[hierarchySym];
+            hierarchyNodes = hierarchy.filter(node => node.mesh); // Only nodes with meshes
+            
+            console.log(`Found ${hierarchyNodes.length} nodes with meshes`);
+            
+            // Build flexible node-to-step mapping
+            buildFlexibleNodeMapping(hierarchyNodes);
+            
+            // Initialize raycasting
+            raycaster = new THREE.Raycaster();
+            
+            // Try to get camera from viewer
+            // We'll create a temporary camera for raycasting
+            camera = new THREE.PerspectiveCamera(
+                75,
+                viewer.clientWidth / viewer.clientHeight,
+                0.1,
+                1000
+            );
+            
+            console.log('Hit detection initialized');
+        }
+        
+        function buildFlexibleNodeMapping(nodes) {
+            // Normalize function to handle variations
+            function normalizeName(name) {
+                if (!name) return '';
+                return name
+                    .toLowerCase()
+                    .replace(/[._\s-]/g, '') // Remove dots, underscores, spaces, hyphens
+                    .trim();
+            }
+            
+            // Build map with normalized names
             CONFIG.interactiveObjects.forEach((targetNames, stepIndex) => {
                 const names = Array.isArray(targetNames) ? targetNames : [targetNames];
-                names.forEach(name => {
-                    nodeToStepMap.set(name, stepIndex);
+                names.forEach(configName => {
+                    const normalized = normalizeName(configName);
+                    nodeToStepMap.set(normalized, stepIndex);
+                    
+                    // Also check actual node names and create mappings
+                    nodes.forEach(node => {
+                        const nodeNormalized = normalizeName(node.name);
+                        if (nodeNormalized === normalized || 
+                            nodeNormalized.includes(normalized) || 
+                            normalized.includes(nodeNormalized)) {
+                            // Map both the config name and actual node name
+                            nodeToStepMap.set(node.name, stepIndex);
+                            nodeToStepMap.set(normalized, stepIndex);
+                            console.log(`Mapped "${node.name}" -> Step ${stepIndex + 1}`);
+                        }
+                    });
                 });
             });
             
-            console.log('Node mapping built:', Array.from(nodeToStepMap.entries()));
+            console.log('Flexible node mapping built:', Array.from(nodeToStepMap.entries()));
+        }
+        
+        // Function to find which node was hit using raycasting
+        function findHitNode(clientX, clientY) {
+            if (!raycaster || !camera || !hierarchyNodes.length) {
+                return null;
+            }
+            
+            // Get normalized device coordinates
+            const rect = viewer.getBoundingClientRect();
+            const mouse = new THREE.Vector2();
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            
+            // Update camera to match viewer's camera
+            // Get camera from viewer if available, otherwise use default
+            if (viewer.camera) {
+                // Copy camera properties
+                camera.position.copy(viewer.camera.position);
+                camera.quaternion.copy(viewer.camera.quaternion);
+                camera.updateMatrixWorld();
+            }
+            
+            // Update raycaster
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Get all meshes from hierarchy nodes
+            const meshes = hierarchyNodes
+                .map(node => node.mesh)
+                .filter(mesh => mesh && mesh.isMesh);
+            
+            if (meshes.length === 0) {
+                console.warn('No meshes found in hierarchy nodes');
+                return null;
+            }
+            
+            // Perform raycasting
+            const intersects = raycaster.intersectObjects(meshes, true);
+            
+            if (intersects.length > 0) {
+                const hitMesh = intersects[0].object;
+                // Find which node this mesh belongs to
+                const hitNode = hierarchyNodes.find(node => node.mesh === hitMesh);
+                if (hitNode) {
+                    console.log('Hit node:', hitNode.name);
+                    return hitNode.name;
+                }
+            }
+            
+            return null;
         }
 
 
@@ -484,8 +616,30 @@
         function getStepIndexForNode(nodeName) {
             if (!nodeName) return -1;
             
-            // Check if this node name matches any of our interactive objects
-            return nodeToStepMap.get(nodeName) ?? -1;
+            // Try exact match first
+            let stepIndex = nodeToStepMap.get(nodeName);
+            if (stepIndex !== undefined) return stepIndex;
+            
+            // Try flexible matching (normalize the name)
+            function normalizeName(name) {
+                return name.toLowerCase().replace(/[._\s-]/g, '').trim();
+            }
+            
+            const normalized = normalizeName(nodeName);
+            stepIndex = nodeToStepMap.get(normalized);
+            if (stepIndex !== undefined) return stepIndex;
+            
+            // Try partial matching
+            for (const [mappedName, mappedStep] of nodeToStepMap.entries()) {
+                const mappedNormalized = normalizeName(mappedName);
+                if (normalized === mappedNormalized || 
+                    normalized.includes(mappedNormalized) || 
+                    mappedNormalized.includes(normalized)) {
+                    return mappedStep;
+                }
+            }
+            
+            return -1;
         }
 
         // ============================================
@@ -664,36 +818,14 @@
                 }
             }
             
-            // Method 6: Check viewer methods for hit detection
-            console.log('Checking viewer prototype methods...');
-            const viewerProto = Object.getPrototypeOf(viewer);
-            const allMethods = Object.getOwnPropertyNames(viewerProto);
-            const hitRelatedMethods = allMethods.filter(m => 
-                m.toLowerCase().includes('hit') || 
-                m.toLowerCase().includes('query') || 
-                m.toLowerCase().includes('select') ||
-                m.toLowerCase().includes('intersect') ||
-                m.toLowerCase().includes('pick')
-            );
-            console.log('Hit-related methods found:', hitRelatedMethods);
-            
-            // Try calling any hit-related methods if they exist
-            hitRelatedMethods.forEach(methodName => {
-                try {
-                    const method = viewer[methodName];
-                    if (typeof method === 'function') {
-                        console.log(`Trying ${methodName}...`);
-                        // Try calling with coordinates
-                        const result = method.call(viewer, event.clientX, event.clientY);
-                        console.log(`${methodName} result:`, result);
-                        if (result && result.node) {
-                            nodeName = result.node.name || result.node;
-                        }
-                    }
-                } catch (e) {
-                    console.log(`${methodName} error:`, e.message);
+            // Method 6: Use raycasting with hierarchy nodes
+            if (!nodeName && raycaster && hierarchyNodes.length > 0) {
+                console.log('Attempting raycasting with hierarchy nodes...');
+                nodeName = findHitNode(event.clientX, event.clientY);
+                if (nodeName) {
+                    console.log('✓ Found node via raycasting:', nodeName);
                 }
-            });
+            }
             
             console.log('Final resolved node name:', nodeName);
             console.log('=== END CLICK DEBUG ===');
