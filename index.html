@@ -619,17 +619,81 @@
                 // Try to see if model-viewer exposes a way to query hits
             }
             
-            // Method 5: Check if model-viewer exposes scene graph or nodes
+            // Method 5: Access Symbol properties to get node hierarchy
             if (!nodeName && viewer.model) {
-                console.log('Checking viewer.model for node information...');
-                console.log('viewer.model:', viewer.model);
-                if (viewer.model.scene) {
-                    console.log('viewer.model.scene:', viewer.model.scene);
+                console.log('Checking viewer.model Symbol properties...');
+                const symbols = Object.getOwnPropertySymbols(viewer.model);
+                console.log('Found', symbols.length, 'Symbol properties');
+                
+                // Find and access hierarchy Symbol
+                const hierarchySym = symbols.find(s => s.toString().includes('hierarchy'));
+                if (hierarchySym) {
+                    try {
+                        const hierarchy = viewer.model[hierarchySym];
+                        console.log('Hierarchy accessed:', Array.isArray(hierarchy) ? `Array(${hierarchy.length})` : typeof hierarchy);
+                        
+                        if (Array.isArray(hierarchy)) {
+                            console.log('Hierarchy contains', hierarchy.length, 'nodes');
+                            
+                            // Log first few nodes to see structure
+                            hierarchy.slice(0, 10).forEach((node, index) => {
+                                console.log(`Node ${index}:`, {
+                                    name: node?.name,
+                                    type: node?.type,
+                                    keys: Object.keys(node || {})
+                                });
+                            });
+                            
+                            // Store hierarchy for potential use
+                            window.modelHierarchy = hierarchy;
+                        }
+                    } catch (e) {
+                        console.error('Error accessing hierarchy:', e);
+                    }
                 }
-                if (viewer.model.nodes) {
-                    console.log('viewer.model.nodes:', viewer.model.nodes);
+                
+                // Check for primitives Symbol (might contain mesh info)
+                const primitivesSym = symbols.find(s => s.toString().includes('primitives'));
+                if (primitivesSym) {
+                    try {
+                        const primitives = viewer.model[primitivesSym];
+                        console.log('Primitives:', Array.isArray(primitives) ? `Array(${primitives.length})` : typeof primitives);
+                    } catch (e) {
+                        console.error('Error accessing primitives:', e);
+                    }
                 }
             }
+            
+            // Method 6: Check viewer methods for hit detection
+            console.log('Checking viewer prototype methods...');
+            const viewerProto = Object.getPrototypeOf(viewer);
+            const allMethods = Object.getOwnPropertyNames(viewerProto);
+            const hitRelatedMethods = allMethods.filter(m => 
+                m.toLowerCase().includes('hit') || 
+                m.toLowerCase().includes('query') || 
+                m.toLowerCase().includes('select') ||
+                m.toLowerCase().includes('intersect') ||
+                m.toLowerCase().includes('pick')
+            );
+            console.log('Hit-related methods found:', hitRelatedMethods);
+            
+            // Try calling any hit-related methods if they exist
+            hitRelatedMethods.forEach(methodName => {
+                try {
+                    const method = viewer[methodName];
+                    if (typeof method === 'function') {
+                        console.log(`Trying ${methodName}...`);
+                        // Try calling with coordinates
+                        const result = method.call(viewer, event.clientX, event.clientY);
+                        console.log(`${methodName} result:`, result);
+                        if (result && result.node) {
+                            nodeName = result.node.name || result.node;
+                        }
+                    }
+                } catch (e) {
+                    console.log(`${methodName} error:`, e.message);
+                }
+            });
             
             console.log('Final resolved node name:', nodeName);
             console.log('=== END CLICK DEBUG ===');
