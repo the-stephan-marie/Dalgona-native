@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tap-to-Advance AR Experience</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     
     <style>
@@ -226,31 +225,69 @@
         let raycaster = null;
         let camera = null;
         let scene = null;
-        let mouse = new THREE.Vector2();
+        let mouse = null; // Will be initialized when THREE is available
         let interactiveMeshes = new Map(); // Cache of interactive objects
         let animationCheckInterval = null;
 
         // Initialize raycasting after model loads
         viewer.addEventListener('load', () => {
-            setupRaycasting();
-            // Set initial time to frame 1
-            viewer.currentTime = frameToTime(1);
-            viewer.pause();
+            // Wait a bit for model-viewer to fully initialize
+            setTimeout(() => {
+                setupRaycasting();
+                // Set initial time to frame 1
+                viewer.currentTime = frameToTime(1);
+                viewer.pause();
+            }, 100);
         });
 
         function setupRaycasting() {
-            // Get Three.js scene from model-viewer
-            scene = viewer.getScene();
+            // Access Three.js from model-viewer
+            // Model-viewer exposes THREE globally, but we need to wait for it
+            if (typeof THREE === 'undefined') {
+                console.warn('Three.js not yet available. Retrying...');
+                setTimeout(setupRaycasting, 100);
+                return;
+            }
+            
+            // Get Three.js scene from model-viewer's model property
+            // The model property contains the loaded GLTF scene
+            const gltf = viewer.model;
+            
+            if (!gltf) {
+                console.error('Could not access Three.js model. Model not loaded yet.');
+                return;
+            }
+            
+            // The scene is typically at gltf.scene
+            scene = gltf.scene || gltf;
             
             if (!scene) {
                 console.error('Could not access Three.js scene');
                 return;
             }
             
-            // Get camera from model-viewer
-            camera = viewer.getCamera();
+            // Get camera from model-viewer's camera property or create one
+            // Model-viewer manages its own camera internally
+            // We'll use the viewer's camera for raycasting
+            if (viewer.camera) {
+                camera = viewer.camera;
+            } else {
+                // Create a temporary camera for raycasting
+                // We'll update it based on viewer's camera state
+                camera = new THREE.PerspectiveCamera(
+                    75, 
+                    viewer.clientWidth / viewer.clientHeight, 
+                    0.1, 
+                    1000
+                );
+            }
             
-            // Create raycaster
+            // Initialize mouse vector
+            if (!mouse) {
+                mouse = new THREE.Vector2();
+            }
+            
+            // Create raycaster using Three.js
             raycaster = new THREE.Raycaster();
             
             // Find and cache all interactive objects
@@ -403,7 +440,16 @@
         // ============================================
 
         function getIntersectedObject(event) {
-            if (!raycaster || !camera || !scene) {
+            if (!raycaster || !scene || !mouse) {
+                return null;
+            }
+            
+            // Ensure camera is available
+            if (!camera && viewer.camera) {
+                camera = viewer.camera;
+            }
+            
+            if (!camera) {
                 return null;
             }
             
