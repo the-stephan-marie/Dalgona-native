@@ -423,64 +423,177 @@
 
         function setupRaycasting() {
             // Try multiple ways to access the scene from model-viewer
-            let gltf = null;
             let potentialScene = null;
             
-            // Method 1: Try viewer.model
-            gltf = viewer.model;
-            if (gltf && gltf.scene) {
-                potentialScene = gltf.scene;
-            }
+            console.log('=== Attempting to access scene ===');
             
-            // Method 2: Try viewer.scene (some versions expose this)
-            if (!potentialScene && viewer.scene) {
-                potentialScene = viewer.scene;
-            }
-            
-            // Method 3: Try accessing through renderer
-            if (!potentialScene && viewer.renderer) {
-                const renderer = viewer.renderer;
-                if (renderer.scene) {
-                    potentialScene = renderer.scene;
+            // Method 1: Try renderRoot (Shadow DOM access point)
+            if (viewer.renderRoot) {
+                console.log('Found renderRoot, checking properties...');
+                const renderRoot = viewer.renderRoot;
+                const renderRootKeys = Object.keys(renderRoot);
+                console.log('renderRoot keys:', renderRootKeys);
+                
+                // Recursively search for scene in renderRoot
+                function findSceneInObject(obj, path = 'renderRoot', depth = 0) {
+                    if (depth > 3 || !obj || typeof obj !== 'object') return null;
+                    
+                    // Check if this is a Three.js Scene
+                    if (obj.type === 'Scene' && typeof obj.traverse === 'function') {
+                        console.log('✓ Found Scene at:', path);
+                        return obj;
+                    }
+                    
+                    // Check if it has a scene property
+                    if (obj.scene && typeof obj.scene.traverse === 'function') {
+                        console.log('✓ Found scene property at:', path);
+                        return obj.scene;
+                    }
+                    
+                    // Check common Three.js renderer properties
+                    if (obj.domElement && obj.scene) {
+                        console.log('✓ Found renderer-like object at:', path);
+                        if (typeof obj.scene.traverse === 'function') {
+                            return obj.scene;
+                        }
+                    }
+                    
+                    // Recursively check properties (skip circular refs and common non-scene props)
+                    const skipKeys = ['parent', 'children', '__proto__', 'prototype', 'constructor'];
+                    for (const key in obj) {
+                        if (skipKeys.includes(key) || key.startsWith('__')) continue;
+                        try {
+                            const value = obj[key];
+                            if (value && typeof value === 'object' && value !== obj) {
+                                const result = findSceneInObject(value, `${path}.${key}`, depth + 1);
+                                if (result) return result;
+                            }
+                        } catch (e) {
+                            // Skip circular references
+                        }
+                    }
+                    
+                    return null;
                 }
+                
+                potentialScene = findSceneInObject(renderRoot);
             }
             
-            // Method 4: Try scene-graph API
-            if (!potentialScene && viewer.sceneGraph) {
-                const sceneGraph = viewer.sceneGraph;
-                if (sceneGraph.scene) {
-                    potentialScene = sceneGraph.scene;
-                } else if (sceneGraph.model && sceneGraph.model.scene) {
-                    potentialScene = sceneGraph.model.scene;
-                }
-            }
-            
-            // Debug: Log what we found
-            console.log('viewer.model:', viewer.model);
-            console.log('viewer.scene:', viewer.scene);
-            console.log('viewer.renderer:', viewer.renderer);
-            console.log('viewer.sceneGraph:', viewer.sceneGraph);
-            console.log('potentialScene:', potentialScene);
-            
-            if (!potentialScene) {
-                console.error('Could not find scene. Available viewer properties:', Object.keys(viewer));
-                // Try to get scene from model property structure
-                if (gltf) {
-                    console.log('gltf structure:', gltf);
-                    console.log('gltf type:', typeof gltf);
-                    console.log('gltf constructor:', gltf.constructor?.name);
-                    // Try accessing scene directly if gltf IS the scene
-                    if (typeof gltf.traverse === 'function') {
-                        potentialScene = gltf;
+            // Method 2: Try accessing through Shadow DOM canvas
+            if (!potentialScene && viewer.renderRoot) {
+                const shadowRoot = viewer.renderRoot.shadowRoot;
+                if (shadowRoot) {
+                    const canvas = shadowRoot.querySelector('canvas');
+                    if (canvas) {
+                        console.log('Found canvas, checking WebGL context...');
+                        // WebGL context might have references to Three.js objects
+                        const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+                        if (gl) {
+                            console.log('Found WebGL context');
+                            // Try to find scene through canvas properties
+                            for (const key in canvas) {
+                                const value = canvas[key];
+                                if (value && typeof value === 'object' && value.scene) {
+                                    if (typeof value.scene.traverse === 'function') {
+                                        potentialScene = value.scene;
+                                        console.log('✓ Found scene through canvas[' + key + ']');
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
             
-            scene = potentialScene;
+            // Method 3: Check viewer.model (even though it's empty)
+            if (!potentialScene && viewer.model) {
+                const model = viewer.model;
+                const modelKeys = Object.keys(model);
+                console.log('Checking model keys:', modelKeys);
+                
+                for (const key of modelKeys) {
+                    const value = model[key];
+                    if (value && typeof value === 'object') {
+                        if (value.scene && typeof value.scene.traverse === 'function') {
+                            potentialScene = value.scene;
+                            console.log('✓ Found scene in model[' + key + ']');
+                            break;
+                        }
+                        if (typeof value.traverse === 'function' && value.type === 'Scene') {
+                            potentialScene = value;
+                            console.log('✓ Found scene object in model[' + key + ']');
+                            break;
+                        }
+                    }
+                }
+            }
             
-            // Verify scene is valid and has traverse method
+            console.log('potentialScene result:', potentialScene);
+            
+            if (!potentialScene) {
+                console.warn('Scene not found in initial attempt, trying delayed access...');
+                setTimeout(() => {
+                    tryDelayedSceneAccess();
+                }, 2000);
+                return;
+            }
+            
+            scene = potentialScene;
+            continueRaycastingSetup();
+        }
+        
+        function tryDelayedSceneAccess() {
+            console.log('=== Delayed scene access attempt ===');
+            let potentialScene = null;
+            
+            // Try renderRoot again with deeper search
+            if (viewer.renderRoot) {
+                const renderRoot = viewer.renderRoot;
+                console.log('Delayed: Checking renderRoot more deeply...');
+                
+                // Try accessing all properties more aggressively
+                for (const key in renderRoot) {
+                    try {
+                        const value = renderRoot[key];
+                        if (value && typeof value === 'object') {
+                            console.log(`Checking renderRoot.${key}:`, typeof value);
+                            
+                            // Check if it's a renderer
+                            if (value.scene && typeof value.scene.traverse === 'function') {
+                                potentialScene = value.scene;
+                                console.log('✓ Found scene in delayed renderRoot[' + key + ']');
+                                break;
+                            }
+                            
+                            // Check nested properties
+                            if (value.renderer && value.renderer.scene) {
+                                if (typeof value.renderer.scene.traverse === 'function') {
+                                    potentialScene = value.renderer.scene;
+                                    console.log('✓ Found scene in delayed renderRoot[' + key + '].renderer');
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Skip inaccessible properties
+                    }
+                }
+            }
+            
+            if (potentialScene) {
+                scene = potentialScene;
+                continueRaycastingSetup();
+            } else {
+                console.error('Scene still not accessible after delayed attempt.');
+                console.log('Object-specific tap detection will be disabled.');
+                console.log('Keyframe-based animation will still work.');
+            }
+        }
+        
+        function continueRaycastingSetup() {
             if (!scene) {
-                console.error('Could not access Three.js scene from any method');
+                console.error('Scene is null, cannot setup raycasting');
                 return;
             }
             
@@ -490,6 +603,8 @@
                 console.log('scene keys:', Object.keys(scene));
                 return;
             }
+            
+            console.log('✓ Scene validated, proceeding with raycasting setup');
             
             // Import Three.js dynamically (we need it for raycasting anyway)
             // This will cause a warning about multiple instances, but it's necessary
@@ -504,6 +619,61 @@
             }
             
             initializeRaycasting();
+        }
+        
+        function tryAlternativeSceneAccess() {
+            console.log('=== Trying alternative scene access ===');
+            
+            // Try accessing through renderRoot more deeply
+            if (viewer.renderRoot) {
+                // Try to access internal Three.js objects
+                // Model-viewer stores them in private properties
+                const renderRoot = viewer.renderRoot;
+                
+                // Check all properties recursively
+                function findSceneInObject(obj, path = '') {
+                    if (!obj || typeof obj !== 'object') return null;
+                    
+                    // Check if this is a Three.js Scene
+                    if (obj.type === 'Scene' && typeof obj.traverse === 'function') {
+                        console.log('Found Scene at:', path);
+                        return obj;
+                    }
+                    
+                    // Check if it has a scene property
+                    if (obj.scene && typeof obj.scene.traverse === 'function') {
+                        console.log('Found scene property at:', path);
+                        return obj.scene;
+                    }
+                    
+                    // Recursively check properties (limit depth to avoid infinite loops)
+                    if (path.split('.').length < 5) {
+                        for (const key in obj) {
+                            if (key.startsWith('_') || key === 'parent' || key === 'children') continue;
+                            try {
+                                const result = findSceneInObject(obj[key], path ? `${path}.${key}` : key);
+                                if (result) return result;
+                            } catch (e) {
+                                // Skip circular references
+                            }
+                        }
+                    }
+                    
+                    return null;
+                }
+                
+                const foundScene = findSceneInObject(renderRoot, 'renderRoot');
+                if (foundScene) {
+                    scene = foundScene;
+                    console.log('Scene found through recursive search!');
+                    initializeRaycasting();
+                    return;
+                }
+            }
+            
+            console.error('Could not find scene through any method.');
+            console.log('Object-specific tap detection will not work.');
+            console.log('Consider using model-viewer\'s built-in interaction system instead.');
         }
         
         function initializeRaycasting() {
