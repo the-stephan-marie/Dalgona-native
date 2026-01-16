@@ -404,7 +404,8 @@
         let hierarchyNodes = []; // Store hierarchy nodes with meshes
         let THREE = null; // Will store Three.js reference
         let raycaster = null;
-        let camera = null;
+        let scene = null; // Store the Three.js scene
+        let camera = null; // Store the camera reference
         
         // Initialize after model loads
         viewer.addEventListener('load', () => {
@@ -461,19 +462,92 @@
             // Build flexible node-to-step mapping
             buildFlexibleNodeMapping(hierarchyNodes);
             
+            // Access the scene from viewer.model
+            // Try to find the scene through various Symbol properties
+            const sceneSym = symbols.find(s => {
+                const symStr = s.toString();
+                return symStr.includes('scene') || symStr.includes('roots');
+            });
+            
+            if (sceneSym) {
+                const roots = viewer.model[sceneSym];
+                if (Array.isArray(roots) && roots.length > 0) {
+                    // The first root is usually the scene
+                    scene = roots[0];
+                    console.log('Found scene through roots Symbol');
+                }
+            }
+            
+            // If we didn't find the scene, try accessing it through renderRoot
+            if (!scene && viewer.renderRoot) {
+                // Try to find Three.js scene in renderRoot
+                const findScene = (obj) => {
+                    if (!obj) return null;
+                    if (obj.type === 'Scene' || (obj.isScene && obj.isScene())) return obj;
+                    if (obj.children) {
+                        for (let child of obj.children) {
+                            const found = findScene(child);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                };
+                scene = findScene(viewer.renderRoot);
+                if (scene) console.log('Found scene through renderRoot');
+            }
+            
             // Initialize raycasting
             raycaster = new THREE.Raycaster();
             
-            // Try to get camera from viewer
-            // We'll create a temporary camera for raycasting
-            camera = new THREE.PerspectiveCamera(
-                75,
-                viewer.clientWidth / viewer.clientHeight,
-                0.1,
-                1000
-            );
+            // Try to get camera from viewer's renderer
+            // Access through renderRoot or model-viewer's internal renderer
+            if (viewer.renderRoot) {
+                // Try to find camera in renderRoot
+                const findCamera = (obj) => {
+                    if (!obj) return null;
+                    if (obj.type === 'PerspectiveCamera' || (obj.isPerspectiveCamera && obj.isPerspectiveCamera())) return obj;
+                    if (obj.camera) return obj.camera;
+                    if (obj.children) {
+                        for (let child of obj.children) {
+                            const found = findCamera(child);
+                            if (found) return found;
+                        }
+                    }
+                    return null;
+                };
+                camera = findCamera(viewer.renderRoot);
+                if (camera) {
+                    console.log('Found camera through renderRoot');
+                }
+            }
             
-            console.log('Hit detection initialized');
+            // If we still don't have a camera, try accessing through viewer's internal properties
+            if (!camera && viewer.model) {
+                // Check if there's a camera Symbol
+                const cameraSym = symbols.find(s => s.toString().includes('camera'));
+                if (cameraSym) {
+                    camera = viewer.model[cameraSym];
+                    if (camera) console.log('Found camera through Symbol');
+                }
+            }
+            
+            // Fallback: create a camera with model-viewer's FOV
+            if (!camera) {
+                const fov = viewer.getFieldOfView ? viewer.getFieldOfView() : 45;
+                camera = new THREE.PerspectiveCamera(
+                    fov,
+                    viewer.clientWidth / viewer.clientHeight,
+                    0.1,
+                    1000
+                );
+                console.log('Created fallback camera');
+            }
+            
+            console.log('Hit detection initialized', {
+                hasScene: !!scene,
+                hasCamera: !!camera,
+                nodeCount: hierarchyNodes.length
+            });
         }
         
         function buildFlexibleNodeMapping(nodes) {
@@ -514,48 +588,136 @@
         // Function to find which node was hit using raycasting
         function findHitNode(clientX, clientY) {
             if (!raycaster || !camera || !hierarchyNodes.length) {
+                console.warn('Raycasting prerequisites not met:', {
+                    hasRaycaster: !!raycaster,
+                    hasCamera: !!camera,
+                    hasNodes: hierarchyNodes.length > 0
+                });
                 return null;
             }
             
-            // Get normalized device coordinates
+            // Get normalized device coordinates (NDC)
             const rect = viewer.getBoundingClientRect();
             const mouse = new THREE.Vector2();
             mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
             
-            // Update camera to match viewer's camera
-            // Get camera from viewer if available, otherwise use default
-            if (viewer.camera) {
-                // Copy camera properties
-                camera.position.copy(viewer.camera.position);
-                camera.quaternion.copy(viewer.camera.quaternion);
+            console.log('Raycasting with coordinates:', {
+                clientX, clientY,
+                rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                mouseNDC: { x: mouse.x, y: mouse.y }
+            });
+            
+            // Update camera properties from model-viewer's camera if available
+            // Try to sync camera from viewer's internal state
+            if (viewer.getCameraOrbit) {
+                const orbit = viewer.getCameraOrbit();
+                const target = viewer.getCameraTarget();
+                const fov = viewer.getFieldOfView ? viewer.getFieldOfView() : 45;
+                
+                // Update camera FOV
+                camera.fov = fov;
+                camera.aspect = rect.width / rect.height;
+                camera.updateProjectionMatrix();
+                
+                // Calculate camera position from orbit
+                const radius = orbit.radius || 1;
+                const theta = orbit.theta || 0; // azimuth
+                const phi = orbit.phi || Math.PI / 2; // polar angle
+                
+                // Convert spherical to cartesian
+                const x = radius * Math.sin(phi) * Math.sin(theta);
+                const y = radius * Math.cos(phi);
+                const z = radius * Math.sin(phi) * Math.cos(theta);
+                
+                camera.position.set(
+                    target.x + x,
+                    target.y + y,
+                    target.z + z
+                );
+                camera.lookAt(target.x, target.y, target.z);
                 camera.updateMatrixWorld();
+                
+                console.log('Camera synced:', {
+                    position: camera.position,
+                    target: target,
+                    fov: fov,
+                    orbit: orbit
+                });
             }
             
             // Update raycaster
             raycaster.setFromCamera(mouse, camera);
             
-            // Get all meshes from hierarchy nodes
-            const meshes = hierarchyNodes
-                .map(node => node.mesh)
-                .filter(mesh => mesh && mesh.isMesh);
+            // Collect all meshes from hierarchy nodes
+            const meshes = [];
+            hierarchyNodes.forEach(node => {
+                if (node.mesh) {
+                    if (node.mesh.isMesh) {
+                        meshes.push(node.mesh);
+                    } else if (node.mesh.children) {
+                        // If mesh has children, traverse them
+                        node.mesh.traverse((child) => {
+                            if (child.isMesh) {
+                                meshes.push(child);
+                            }
+                        });
+                    }
+                }
+            });
+            
+            console.log(`Raycasting against ${meshes.length} meshes`);
             
             if (meshes.length === 0) {
-                console.warn('No meshes found in hierarchy nodes');
+                console.warn('No meshes found for raycasting');
                 return null;
             }
             
             // Perform raycasting
             const intersects = raycaster.intersectObjects(meshes, true);
             
+            console.log(`Found ${intersects.length} intersections`);
+            
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object;
+                console.log('Hit mesh:', hitMesh.name || 'unnamed', hitMesh);
+                
                 // Find which node this mesh belongs to
-                const hitNode = hierarchyNodes.find(node => node.mesh === hitMesh);
-                if (hitNode) {
-                    console.log('Hit node:', hitNode.name);
-                    return hitNode.name;
+                // Check direct mesh match first
+                let hitNode = hierarchyNodes.find(node => node.mesh === hitMesh);
+                
+                // If not found, check if mesh is a child of any node's mesh
+                if (!hitNode) {
+                    hitNode = hierarchyNodes.find(node => {
+                        if (!node.mesh) return false;
+                        let found = false;
+                        node.mesh.traverse((child) => {
+                            if (child === hitMesh) found = true;
+                        });
+                        return found;
+                    });
                 }
+                
+                // Also check by mesh name
+                if (!hitNode && hitMesh.name) {
+                    hitNode = hierarchyNodes.find(node => {
+                        if (!node.mesh) return false;
+                        let found = false;
+                        node.mesh.traverse((child) => {
+                            if (child.name === hitMesh.name) found = true;
+                        });
+                        return found;
+                    });
+                }
+                
+                if (hitNode) {
+                    console.log('✓ Hit node:', hitNode.name);
+                    return hitNode.name;
+                } else {
+                    console.warn('Hit mesh but could not find corresponding node');
+                }
+            } else {
+                console.log('No intersections found');
             }
             
             return null;
