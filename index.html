@@ -535,6 +535,22 @@
         // EVENT HANDLERS
         // ============================================
 
+        // ============================================
+        // DEBUG: Log all events model-viewer fires
+        // ============================================
+        const eventsToLog = ['click', 'select', 'ar-status', 'load', 'model-load', 'error', 'scene-graph-ready'];
+        eventsToLog.forEach(eventType => {
+            viewer.addEventListener(eventType, (e) => {
+                console.log(`[${eventType}] event fired`);
+                console.log(`[${eventType}] event object:`, e);
+                console.log(`[${eventType}] event.detail:`, e.detail);
+                console.log(`[${eventType}] event.target:`, e.target);
+                if (e.detail && typeof e.detail === 'object') {
+                    console.log(`[${eventType}] event.detail keys:`, Object.keys(e.detail));
+                }
+            });
+        });
+
         // OBJECT-SPECIFIC CLICK HANDLER USING MODEL-VIEWER'S CLICK EVENT
         viewer.addEventListener('click', (event) => {
             // Ignore if animating (unless it's a looping step)
@@ -543,32 +559,80 @@
             // Ignore AR button clicks
             if (event.target.id === 'ar-button') return;
             
-            // Model-viewer's click event provides hit information
-            // Check event.detail for hit node/material information
-            const hitNode = event.detail?.hit?.node || event.detail?.node;
-            const hitMaterial = event.detail?.hit?.material || event.detail?.material;
+            // Log the ENTIRE event object to see what's available
+            console.log('=== CLICK EVENT DEBUG ===');
+            console.log('Full event object:', event);
+            console.log('event.type:', event.type);
+            console.log('event.detail:', event.detail);
+            console.log('event.detail type:', typeof event.detail);
+            console.log('event.target:', event.target);
+            console.log('event.target.id:', event.target?.id);
+            console.log('event.target.tagName:', event.target?.tagName);
+            console.log('All event properties:', Object.keys(event));
             
-            console.log('Click event detail:', event.detail);
-            console.log('Hit node:', hitNode);
-            console.log('Hit material:', hitMaterial);
-            
-            // Try to get node name from various possible properties
+            // Try accessing hit information from various possible locations
             let nodeName = null;
-            if (hitNode) {
-                nodeName = hitNode.name || hitNode.nodeName || hitNode.id || hitNode;
+            
+            // Method 1: Check event.detail (but it's showing as 1, so might not be here)
+            if (event.detail && typeof event.detail === 'object') {
+                console.log('event.detail is an object, checking properties...');
+                console.log('event.detail.hit:', event.detail.hit);
+                console.log('event.detail.node:', event.detail.node);
+                console.log('event.detail.material:', event.detail.material);
+                
+                nodeName = event.detail.hit?.node?.name || 
+                           event.detail.node?.name || 
+                           event.detail.nodeName ||
+                           event.detail.name ||
+                           event.detail.hit?.name;
             }
             
-            // If nodeName is an object, try to get its name property
-            if (nodeName && typeof nodeName === 'object') {
-                nodeName = nodeName.name || nodeName.nodeName || null;
+            // Method 2: Check if model-viewer has a queryHit method
+            if (!nodeName && typeof viewer.queryHit === 'function') {
+                console.log('Trying viewer.queryHit...');
+                try {
+                    const hit = viewer.queryHit(event.clientX, event.clientY);
+                    console.log('queryHit result:', hit);
+                    if (hit) {
+                        nodeName = hit.node?.name || hit.nodeName || hit.name;
+                    }
+                } catch (e) {
+                    console.log('queryHit error:', e);
+                }
             }
             
-            // Convert to string if needed
-            if (nodeName && typeof nodeName !== 'string') {
-                nodeName = String(nodeName);
+            // Method 3: Check event.target for model-viewer specific properties
+            if (!nodeName && event.target) {
+                console.log('Checking event.target properties...');
+                console.log('event.target properties:', Object.keys(event.target));
+                if (event.target.modelViewer) {
+                    const mv = event.target.modelViewer;
+                    console.log('modelViewer properties:', Object.keys(mv));
+                }
             }
             
-            console.log('Resolved node name:', nodeName);
+            // Method 4: Check if there's hit information in the event's coordinates
+            if (!nodeName) {
+                console.log('Checking for hit info via coordinates...');
+                console.log('event.clientX:', event.clientX);
+                console.log('event.clientY:', event.clientY);
+                // Try to see if model-viewer exposes a way to query hits
+            }
+            
+            // Method 5: Check if model-viewer exposes scene graph or nodes
+            if (!nodeName && viewer.model) {
+                console.log('Checking viewer.model for node information...');
+                console.log('viewer.model:', viewer.model);
+                if (viewer.model.scene) {
+                    console.log('viewer.model.scene:', viewer.model.scene);
+                }
+                if (viewer.model.nodes) {
+                    console.log('viewer.model.nodes:', viewer.model.nodes);
+                }
+            }
+            
+            console.log('Final resolved node name:', nodeName);
+            console.log('=== END CLICK DEBUG ===');
             
             if (!nodeName) {
                 // Clicked on empty space - show feedback
@@ -576,6 +640,7 @@
                     const stepData = CONFIG.steps[currentStepIndex];
                     descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
                 }
+                console.warn('No node name detected. Check console for event structure.');
                 return;
             }
             
@@ -605,6 +670,15 @@
                 // Clicked an object from a future step
                 descText.innerText = 'Complete previous steps first. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             }
+        });
+
+        // Also try listening to 'select' event if model-viewer provides it
+        viewer.addEventListener('select', (event) => {
+            console.log('=== SELECT EVENT DEBUG ===');
+            console.log('Select event fired:', event);
+            console.log('Select event detail:', event.detail);
+            console.log('Select event target:', event.target);
+            console.log('=== END SELECT DEBUG ===');
         });
 
         // ============================================
