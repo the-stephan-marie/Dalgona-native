@@ -115,12 +115,6 @@
     </div>
 
     <script type="module">
-        // Import Three.js as a module
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-        
-        // Make THREE available globally for the rest of the script
-        window.THREE = THREE;
-        
         // ============================================
         // CONFIGURATION: Keyframe-based animation with object-specific taps
         // ============================================
@@ -248,7 +242,6 @@
 
         function setupRaycasting() {
             // Get Three.js scene from model-viewer's model property
-            // The model property contains the loaded GLTF scene
             const gltf = viewer.model;
             
             if (!gltf) {
@@ -256,28 +249,79 @@
                 return;
             }
             
-            // The scene is typically at gltf.scene
-            scene = gltf.scene || gltf;
+            // The scene should be at gltf.scene
+            scene = gltf.scene;
             
+            // Verify scene is valid and has traverse method
             if (!scene) {
-                console.error('Could not access Three.js scene');
+                console.error('Could not access Three.js scene from gltf.scene');
+                console.log('gltf keys:', Object.keys(gltf));
                 return;
             }
             
-            // Get camera from model-viewer's camera property or create one
-            // Model-viewer manages its own camera internally
-            // We'll use the viewer's camera for raycasting
+            if (typeof scene.traverse !== 'function') {
+                console.error('Scene object does not have traverse method');
+                console.log('scene type:', scene.constructor?.name);
+                console.log('scene keys:', Object.keys(scene));
+                return;
+            }
+            
+            // Get Three.js classes from the first mesh we find
+            // This avoids importing Three.js separately
+            let THREE_Namespace = null;
+            scene.traverse((object) => {
+                if (object.isMesh && !THREE_Namespace) {
+                    // Get the Mesh constructor, then access its parent module
+                    const MeshClass = object.constructor;
+                    // THREE classes are typically accessible through the constructor
+                    // Try to find Vector2, Raycaster, etc. in the namespace
+                    if (MeshClass.constructor && MeshClass.constructor.Vector2) {
+                        THREE_Namespace = MeshClass.constructor;
+                    } else {
+                        // Try accessing through the prototype chain
+                        const proto = Object.getPrototypeOf(MeshClass);
+                        if (proto && proto.constructor && proto.constructor.Vector2) {
+                            THREE_Namespace = proto.constructor;
+                        }
+                    }
+                }
+            });
+            
+            // If we found THREE namespace, use it
+            if (THREE_Namespace && THREE_Namespace.Vector2) {
+                window.THREE = THREE_Namespace;
+            } else {
+                // Fallback: dynamically import Three.js (will cause warning but will work)
+                import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js').then((THREE) => {
+                    window.THREE = THREE;
+                    initializeRaycasting();
+                }).catch((err) => {
+                    console.error('Failed to import Three.js:', err);
+                });
+                return;
+            }
+            
+            initializeRaycasting();
+        }
+        
+        function initializeRaycasting() {
+            const THREE = window.THREE;
+            
+            if (!THREE) {
+                console.error('THREE.js not available');
+                return;
+            }
+            
+            // Get camera from model-viewer
             if (viewer.camera) {
                 camera = viewer.camera;
             } else {
-                // Create a temporary camera for raycasting
-                // We'll update it based on viewer's camera state
-                camera = new THREE.PerspectiveCamera(
-                    75, 
-                    viewer.clientWidth / viewer.clientHeight, 
-                    0.1, 
-                    1000
-                );
+                // Try to find camera in the scene
+                scene.traverse((object) => {
+                    if (object.isCamera && !camera) {
+                        camera = object;
+                    }
+                });
             }
             
             // Initialize mouse vector
@@ -285,7 +329,7 @@
                 mouse = new THREE.Vector2();
             }
             
-            // Create raycaster using Three.js
+            // Create raycaster
             raycaster = new THREE.Raycaster();
             
             // Find and cache all interactive objects
@@ -443,8 +487,17 @@
             }
             
             // Ensure camera is available
-            if (!camera && viewer.camera) {
-                camera = viewer.camera;
+            if (!camera) {
+                if (viewer.camera) {
+                    camera = viewer.camera;
+                } else {
+                    // Try to find camera in scene
+                    scene.traverse((object) => {
+                        if (object.isCamera && !camera) {
+                            camera = object;
+                        }
+                    });
+                }
             }
             
             if (!camera) {
@@ -464,11 +517,13 @@
             
             // Get all meshes in the scene for intersection testing
             const meshes = [];
-            scene.traverse((object) => {
-                if (object.isMesh) {
-                    meshes.push(object);
-                }
-            });
+            if (scene && typeof scene.traverse === 'function') {
+                scene.traverse((object) => {
+                    if (object.isMesh) {
+                        meshes.push(object);
+                    }
+                });
+            }
             
             // Calculate intersections
             const intersects = raycaster.intersectObjects(meshes, true);
