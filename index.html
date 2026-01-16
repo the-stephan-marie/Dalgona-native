@@ -96,6 +96,8 @@
         ar-modes="webxr scene-viewer quick-look"
         camera-controls
         disable-zoom
+        interaction-prompt="none"
+        interaction-prompt-threshold="Infinity"
         shadow-intensity="1.2"
         environment-image="neutral" 
         tone-mapping="commerce"
@@ -707,8 +709,22 @@
 
         // OBJECT-SPECIFIC CLICK HANDLER USING MODEL-VIEWER'S CLICK EVENT
         viewer.addEventListener('click', (event) => {
+            // Prevent default camera centering behavior
+            event.stopPropagation();
+            
+            // Store current camera state to prevent auto-centering
+            const currentCameraOrbit = viewer.getCameraOrbit();
+            const currentCameraTarget = viewer.getCameraTarget();
+            
             // Ignore if animating (unless it's a looping step)
-            if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) return;
+            if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) {
+                // Restore camera position
+                setTimeout(() => {
+                    viewer.setCameraOrbit(currentCameraOrbit.theta, currentCameraOrbit.phi, currentCameraOrbit.radius);
+                    viewer.setCameraTarget(currentCameraTarget.x, currentCameraTarget.y, currentCameraTarget.z);
+                }, 0);
+                return;
+            }
             
             // Ignore AR button clicks
             if (event.target.id === 'ar-button') return;
@@ -866,6 +882,13 @@
                 // Clicked an object from a future step
                 descText.innerText = 'Complete previous steps first. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             }
+            
+            // Prevent camera from auto-centering after click
+            // Restore camera position immediately after processing
+            setTimeout(() => {
+                viewer.setCameraOrbit(currentCameraOrbit.theta, currentCameraOrbit.phi, currentCameraOrbit.radius);
+                viewer.setCameraTarget(currentCameraTarget.x, currentCameraTarget.y, currentCameraTarget.z);
+            }, 0);
         });
 
         // Also try listening to 'select' event if model-viewer provides it
