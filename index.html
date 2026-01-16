@@ -114,7 +114,13 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        // Import Three.js as a module
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+        
+        // Make THREE available globally for the rest of the script
+        window.THREE = THREE;
+        
         // ============================================
         // CONFIGURATION: Keyframe-based animation with object-specific taps
         // ============================================
@@ -241,14 +247,6 @@
         });
 
         function setupRaycasting() {
-            // Access Three.js from model-viewer
-            // Model-viewer exposes THREE globally, but we need to wait for it
-            if (typeof THREE === 'undefined') {
-                console.warn('Three.js not yet available. Retrying...');
-                setTimeout(setupRaycasting, 100);
-                return;
-            }
-            
             // Get Three.js scene from model-viewer's model property
             // The model property contains the loaded GLTF scene
             const gltf = viewer.model;
