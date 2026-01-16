@@ -525,9 +525,18 @@
             
             // Get normalized device coordinates
             const rect = viewer.getBoundingClientRect();
+            
+            // Account for any page scroll offset
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+            
+            // Convert to normalized device coordinates (-1 to +1)
             const mouse = new THREE.Vector2();
-            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            mouse.x = (x / rect.width) * 2 - 1;
+            mouse.y = -(y / rect.height) * 2 + 1;
+            
+            // Debug logging (remove after testing)
+            console.log('Click coords:', { clientX, clientY, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, normalized: { x: mouse.x, y: mouse.y } });
             
             // Get only interactive meshes (exclude ground, table, etc.)
             const interactiveMeshes = hierarchyNodes
@@ -817,10 +826,26 @@
             // Ignore AR button clicks
             if (event.target.id === 'ar-button') return;
             
+            // Get coordinates - handle both mouse and touch events
+            let clientX, clientY;
+            if (event.touches && event.touches.length > 0) {
+                // Touch event
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else if (event.changedTouches && event.changedTouches.length > 0) {
+                // Touch event (changedTouches for touchend)
+                clientX = event.changedTouches[0].clientX;
+                clientY = event.changedTouches[0].clientY;
+            } else {
+                // Mouse event
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+            
             // Use raycasting to find hit node
             let nodeName = null;
             if (raycaster && hierarchyNodes.length > 0) {
-                nodeName = findHitNode(event.clientX, event.clientY);
+                nodeName = findHitNode(clientX, clientY);
             }
             
             // Log the node name for debugging (preserve the name)
