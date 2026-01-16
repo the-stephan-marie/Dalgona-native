@@ -394,412 +394,40 @@
         descText.innerText = CONFIG.welcomeDesc;
 
         // ============================================
-        // THREE.JS RAYCASTING SETUP
+        // MODEL-VIEWER CLICK EVENT SETUP
         // ============================================
         
-        let raycaster = null;
-        let camera = null;
-        let scene = null;
-        let mouse = null; // Will be initialized when THREE is available
-        let interactiveMeshes = new Map(); // Cache of interactive objects
-        let animationCheckInterval = null;
-
-        // Initialize raycasting after model loads
+        // Map of node names to step indices
+        let nodeToStepMap = new Map();
+        
+        // Initialize after model loads
         viewer.addEventListener('load', () => {
-            // Wait a bit for model-viewer to fully initialize
-            setTimeout(() => {
-                setupRaycasting();
-                // Set initial time to frame 1
-                viewer.currentTime = frameToTime(1);
-                viewer.pause();
-            }, 500); // Increased delay to ensure model is fully loaded
+            // Set initial time to frame 1
+            viewer.currentTime = frameToTime(1);
+            viewer.pause();
+            
+            // Build node-to-step mapping
+            buildNodeMapping();
         });
         
-        // Also listen for scene-graph-ready event if available
+        // Also listen for scene-graph-ready event
         viewer.addEventListener('scene-graph-ready', () => {
-            console.log('Scene graph ready event fired');
-            setupRaycasting();
+            console.log('Scene graph ready');
+            buildNodeMapping();
         });
-
-        function setupRaycasting() {
-            // Try multiple ways to access the scene from model-viewer
-            let potentialScene = null;
-            
-            console.log('=== Attempting to access scene ===');
-            
-            // Method 1: Try renderRoot (Shadow DOM access point)
-            if (viewer.renderRoot) {
-                console.log('Found renderRoot, checking properties...');
-                const renderRoot = viewer.renderRoot;
-                const renderRootKeys = Object.keys(renderRoot);
-                console.log('renderRoot keys:', renderRootKeys);
-                
-                // Recursively search for scene in renderRoot
-                function findSceneInObject(obj, path = 'renderRoot', depth = 0) {
-                    if (depth > 3 || !obj || typeof obj !== 'object') return null;
-                    
-                    // Check if this is a Three.js Scene
-                    if (obj.type === 'Scene' && typeof obj.traverse === 'function') {
-                        console.log('✓ Found Scene at:', path);
-                        return obj;
-                    }
-                    
-                    // Check if it has a scene property
-                    if (obj.scene && typeof obj.scene.traverse === 'function') {
-                        console.log('✓ Found scene property at:', path);
-                        return obj.scene;
-                    }
-                    
-                    // Check common Three.js renderer properties
-                    if (obj.domElement && obj.scene) {
-                        console.log('✓ Found renderer-like object at:', path);
-                        if (typeof obj.scene.traverse === 'function') {
-                            return obj.scene;
-                        }
-                    }
-                    
-                    // Recursively check properties (skip circular refs and common non-scene props)
-                    const skipKeys = ['parent', 'children', '__proto__', 'prototype', 'constructor'];
-                    for (const key in obj) {
-                        if (skipKeys.includes(key) || key.startsWith('__')) continue;
-                        try {
-                            const value = obj[key];
-                            if (value && typeof value === 'object' && value !== obj) {
-                                const result = findSceneInObject(value, `${path}.${key}`, depth + 1);
-                                if (result) return result;
-                            }
-                        } catch (e) {
-                            // Skip circular references
-                        }
-                    }
-                    
-                    return null;
-                }
-                
-                potentialScene = findSceneInObject(renderRoot);
-            }
-            
-            // Method 2: Try accessing through Shadow DOM canvas
-            if (!potentialScene && viewer.renderRoot) {
-                const shadowRoot = viewer.renderRoot.shadowRoot;
-                if (shadowRoot) {
-                    const canvas = shadowRoot.querySelector('canvas');
-                    if (canvas) {
-                        console.log('Found canvas, checking WebGL context...');
-                        // WebGL context might have references to Three.js objects
-                        const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
-                        if (gl) {
-                            console.log('Found WebGL context');
-                            // Try to find scene through canvas properties
-                            for (const key in canvas) {
-                                const value = canvas[key];
-                                if (value && typeof value === 'object' && value.scene) {
-                                    if (typeof value.scene.traverse === 'function') {
-                                        potentialScene = value.scene;
-                                        console.log('✓ Found scene through canvas[' + key + ']');
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Method 3: Check viewer.model (even though it's empty)
-            if (!potentialScene && viewer.model) {
-                const model = viewer.model;
-                const modelKeys = Object.keys(model);
-                console.log('Checking model keys:', modelKeys);
-                
-                for (const key of modelKeys) {
-                    const value = model[key];
-                    if (value && typeof value === 'object') {
-                        if (value.scene && typeof value.scene.traverse === 'function') {
-                            potentialScene = value.scene;
-                            console.log('✓ Found scene in model[' + key + ']');
-                            break;
-                        }
-                        if (typeof value.traverse === 'function' && value.type === 'Scene') {
-                            potentialScene = value;
-                            console.log('✓ Found scene object in model[' + key + ']');
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            console.log('potentialScene result:', potentialScene);
-            
-            if (!potentialScene) {
-                console.warn('Scene not found in initial attempt, trying delayed access...');
-                setTimeout(() => {
-                    tryDelayedSceneAccess();
-                }, 2000);
-                return;
-            }
-            
-            scene = potentialScene;
-            continueRaycastingSetup();
-        }
         
-        function tryDelayedSceneAccess() {
-            console.log('=== Delayed scene access attempt ===');
-            let potentialScene = null;
-            
-            // Try renderRoot again with deeper search
-            if (viewer.renderRoot) {
-                const renderRoot = viewer.renderRoot;
-                console.log('Delayed: Checking renderRoot more deeply...');
-                
-                // Try accessing all properties more aggressively
-                for (const key in renderRoot) {
-                    try {
-                        const value = renderRoot[key];
-                        if (value && typeof value === 'object') {
-                            console.log(`Checking renderRoot.${key}:`, typeof value);
-                            
-                            // Check if it's a renderer
-                            if (value.scene && typeof value.scene.traverse === 'function') {
-                                potentialScene = value.scene;
-                                console.log('✓ Found scene in delayed renderRoot[' + key + ']');
-                                break;
-                            }
-                            
-                            // Check nested properties
-                            if (value.renderer && value.renderer.scene) {
-                                if (typeof value.renderer.scene.traverse === 'function') {
-                                    potentialScene = value.renderer.scene;
-                                    console.log('✓ Found scene in delayed renderRoot[' + key + '].renderer');
-                                    break;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        // Skip inaccessible properties
-                    }
-                }
-            }
-            
-            if (potentialScene) {
-                scene = potentialScene;
-                continueRaycastingSetup();
-            } else {
-                console.error('Scene still not accessible after delayed attempt.');
-                console.log('Object-specific tap detection will be disabled.');
-                console.log('Keyframe-based animation will still work.');
-            }
-        }
-        
-        function continueRaycastingSetup() {
-            if (!scene) {
-                console.error('Scene is null, cannot setup raycasting');
-                return;
-            }
-            
-            if (typeof scene.traverse !== 'function') {
-                console.error('Scene object does not have traverse method');
-                console.log('scene type:', scene.constructor?.name);
-                console.log('scene keys:', Object.keys(scene));
-                return;
-            }
-            
-            console.log('✓ Scene validated, proceeding with raycasting setup');
-            
-            // Import Three.js dynamically (we need it for raycasting anyway)
-            // This will cause a warning about multiple instances, but it's necessary
-            if (!window.THREE) {
-                import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js').then((THREE) => {
-                    window.THREE = THREE;
-                    initializeRaycasting();
-                }).catch((err) => {
-                    console.error('Failed to import Three.js:', err);
-                });
-                return;
-            }
-            
-            initializeRaycasting();
-        }
-        
-        function tryAlternativeSceneAccess() {
-            console.log('=== Trying alternative scene access ===');
-            
-            // Try accessing through renderRoot more deeply
-            if (viewer.renderRoot) {
-                // Try to access internal Three.js objects
-                // Model-viewer stores them in private properties
-                const renderRoot = viewer.renderRoot;
-                
-                // Check all properties recursively
-                function findSceneInObject(obj, path = '') {
-                    if (!obj || typeof obj !== 'object') return null;
-                    
-                    // Check if this is a Three.js Scene
-                    if (obj.type === 'Scene' && typeof obj.traverse === 'function') {
-                        console.log('Found Scene at:', path);
-                        return obj;
-                    }
-                    
-                    // Check if it has a scene property
-                    if (obj.scene && typeof obj.scene.traverse === 'function') {
-                        console.log('Found scene property at:', path);
-                        return obj.scene;
-                    }
-                    
-                    // Recursively check properties (limit depth to avoid infinite loops)
-                    if (path.split('.').length < 5) {
-                        for (const key in obj) {
-                            if (key.startsWith('_') || key === 'parent' || key === 'children') continue;
-                            try {
-                                const result = findSceneInObject(obj[key], path ? `${path}.${key}` : key);
-                                if (result) return result;
-                            } catch (e) {
-                                // Skip circular references
-                            }
-                        }
-                    }
-                    
-                    return null;
-                }
-                
-                const foundScene = findSceneInObject(renderRoot, 'renderRoot');
-                if (foundScene) {
-                    scene = foundScene;
-                    console.log('Scene found through recursive search!');
-                    initializeRaycasting();
-                    return;
-                }
-            }
-            
-            console.error('Could not find scene through any method.');
-            console.log('Object-specific tap detection will not work.');
-            console.log('Consider using model-viewer\'s built-in interaction system instead.');
-        }
-        
-        function initializeRaycasting() {
-            const THREE = window.THREE;
-            
-            if (!THREE) {
-                console.error('THREE.js not available');
-                return;
-            }
-            
-            // Get camera from model-viewer
-            if (viewer.camera) {
-                camera = viewer.camera;
-            } else {
-                // Try to find camera in the scene
-                scene.traverse((object) => {
-                    if (object.isCamera && !camera) {
-                        camera = object;
-                    }
-                });
-            }
-            
-            // Initialize mouse vector
-            if (!mouse) {
-                mouse = new THREE.Vector2();
-            }
-            
-            // Create raycaster
-            raycaster = new THREE.Raycaster();
-            
-            // Find and cache all interactive objects
-            findInteractiveObjects();
-            
-            console.log('Raycasting initialized. Interactive objects:', Array.from(interactiveMeshes.keys()));
-        }
-
-        function findInteractiveObjects() {
-            if (!scene) return;
-            
-            // Traverse the scene to find objects
-            scene.traverse((object) => {
-                // Check if this object matches any of our interactive object names
-                const objectName = object.name || '';
-                
-                // Check against configured interactive objects
-                CONFIG.interactiveObjects.forEach((targetNames, stepIndex) => {
-                    // Handle both string and array formats
-                    const names = Array.isArray(targetNames) ? targetNames : [targetNames];
-                    
-                    names.forEach(name => {
-                        // Match by exact name (case-sensitive)
-                        if (objectName === name) {
-                            // Only mesh objects can be clicked
-                            if (object.isMesh) {
-                                // Store reference with step index
-                                if (!interactiveMeshes.has(stepIndex)) {
-                                    interactiveMeshes.set(stepIndex, []);
-                                }
-                                interactiveMeshes.get(stepIndex).push(object);
-                                
-                                // Enable hover feedback if configured
-                                if (CONFIG.enableHoverFeedback) {
-                                    setupHoverFeedback(object);
-                                }
-                            }
-                        }
-                    });
+        function buildNodeMapping() {
+            // Build a map of node names to step indices
+            CONFIG.interactiveObjects.forEach((targetNames, stepIndex) => {
+                const names = Array.isArray(targetNames) ? targetNames : [targetNames];
+                names.forEach(name => {
+                    nodeToStepMap.set(name, stepIndex);
                 });
             });
             
-            // If no objects found, log available object names for debugging
-            if (interactiveMeshes.size === 0) {
-                console.warn('No interactive objects found. Available objects:');
-                scene.traverse((object) => {
-                    if (object.isMesh) {
-                        console.log('-', object.name || '(unnamed)');
-                    }
-                });
-            }
+            console.log('Node mapping built:', Array.from(nodeToStepMap.entries()));
         }
 
-        // ============================================
-        // HOVER FEEDBACK (Optional)
-        // ============================================
-
-        function setupHoverFeedback(object) {
-            const originalMaterial = object.material;
-            
-            // Create hover material (slightly brighter/emissive)
-            const hoverMaterial = originalMaterial.clone();
-            if (hoverMaterial.emissive) {
-                hoverMaterial.emissive.setHex(0x444444);
-            }
-            
-            // Store original material
-            object.userData.originalMaterial = originalMaterial;
-            object.userData.hoverMaterial = hoverMaterial;
-        }
-
-        function updateHoverFeedback(event) {
-            if (!CONFIG.enableHoverFeedback || !raycaster) return;
-            
-            const intersectedObject = getIntersectedObject(event);
-            
-            // Reset all objects to original material
-            interactiveMeshes.forEach((objects) => {
-                objects.forEach(obj => {
-                    if (obj.userData && obj.userData.originalMaterial) {
-                        obj.material = obj.userData.originalMaterial;
-                    }
-                });
-            });
-            
-            // Highlight hovered object
-            if (intersectedObject) {
-                const stepIndex = getStepIndexForObject(intersectedObject);
-                if (stepIndex !== -1 && intersectedObject.userData && intersectedObject.userData.hoverMaterial) {
-                    intersectedObject.material = intersectedObject.userData.hoverMaterial;
-                    viewer.style.cursor = 'pointer';
-                } else {
-                    viewer.style.cursor = 'default';
-                }
-            } else {
-                viewer.style.cursor = 'default';
-            }
-        }
 
         // ============================================
         // KEYFRAME-BASED PLAYBACK FUNCTIONS
@@ -850,74 +478,14 @@
         }
 
         // ============================================
-        // OBJECT-SPECIFIC CLICK DETECTION
+        // OBJECT-SPECIFIC CLICK DETECTION USING MODEL-VIEWER'S CLICK EVENT
         // ============================================
 
-        function getIntersectedObject(event) {
-            if (!raycaster || !scene || !mouse) {
-                return null;
-            }
+        function getStepIndexForNode(nodeName) {
+            if (!nodeName) return -1;
             
-            // Ensure camera is available
-            if (!camera) {
-                if (viewer.camera) {
-                    camera = viewer.camera;
-                } else {
-                    // Try to find camera in scene
-                    scene.traverse((object) => {
-                        if (object.isCamera && !camera) {
-                            camera = object;
-                        }
-                    });
-                }
-            }
-            
-            if (!camera) {
-                return null;
-            }
-            
-            // Get mouse/touch position in normalized device coordinates (-1 to +1)
-            const rect = viewer.getBoundingClientRect();
-            const clientX = event.clientX || (event.touches && event.touches[0]?.clientX) || 0;
-            const clientY = event.clientY || (event.touches && event.touches[0]?.clientY) || 0;
-            
-            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-            
-            // Update raycaster with camera and mouse position
-            raycaster.setFromCamera(mouse, camera);
-            
-            // Get all meshes in the scene for intersection testing
-            const meshes = [];
-            if (scene && typeof scene.traverse === 'function') {
-                scene.traverse((object) => {
-                    if (object.isMesh) {
-                        meshes.push(object);
-                    }
-                });
-            }
-            
-            // Calculate intersections
-            const intersects = raycaster.intersectObjects(meshes, true);
-            
-            if (intersects.length > 0) {
-                return intersects[0].object;
-            }
-            
-            return null;
-        }
-
-        function getStepIndexForObject(object) {
-            if (!object) return -1;
-            
-            // Find which step this object belongs to
-            for (const [stepIndex, objects] of interactiveMeshes.entries()) {
-                if (objects.includes(object)) {
-                    return stepIndex;
-                }
-            }
-            
-            return -1;
+            // Check if this node name matches any of our interactive objects
+            return nodeToStepMap.get(nodeName) ?? -1;
         }
 
         // ============================================
@@ -967,7 +535,7 @@
         // EVENT HANDLERS
         // ============================================
 
-        // OBJECT-SPECIFIC CLICK HANDLER
+        // OBJECT-SPECIFIC CLICK HANDLER USING MODEL-VIEWER'S CLICK EVENT
         viewer.addEventListener('click', (event) => {
             // Ignore if animating (unless it's a looping step)
             if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) return;
@@ -975,10 +543,34 @@
             // Ignore AR button clicks
             if (event.target.id === 'ar-button') return;
             
-            // Get the clicked object
-            const clickedObject = getIntersectedObject(event);
+            // Model-viewer's click event provides hit information
+            // Check event.detail for hit node/material information
+            const hitNode = event.detail?.hit?.node || event.detail?.node;
+            const hitMaterial = event.detail?.hit?.material || event.detail?.material;
             
-            if (!clickedObject) {
+            console.log('Click event detail:', event.detail);
+            console.log('Hit node:', hitNode);
+            console.log('Hit material:', hitMaterial);
+            
+            // Try to get node name from various possible properties
+            let nodeName = null;
+            if (hitNode) {
+                nodeName = hitNode.name || hitNode.nodeName || hitNode.id || hitNode;
+            }
+            
+            // If nodeName is an object, try to get its name property
+            if (nodeName && typeof nodeName === 'object') {
+                nodeName = nodeName.name || nodeName.nodeName || null;
+            }
+            
+            // Convert to string if needed
+            if (nodeName && typeof nodeName !== 'string') {
+                nodeName = String(nodeName);
+            }
+            
+            console.log('Resolved node name:', nodeName);
+            
+            if (!nodeName) {
                 // Clicked on empty space - show feedback
                 if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
                     const stepData = CONFIG.steps[currentStepIndex];
@@ -987,12 +579,12 @@
                 return;
             }
             
-            // Find which step this object belongs to
-            const objectStepIndex = getStepIndexForObject(clickedObject);
+            // Find which step this node belongs to
+            const objectStepIndex = getStepIndexForNode(nodeName);
             
             if (objectStepIndex === -1) {
-                // Clicked object is not interactive
-                console.log('Clicked object is not interactive:', clickedObject.name);
+                // Clicked node is not interactive
+                console.log('Clicked node is not interactive:', nodeName);
                 if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
                     const stepData = CONFIG.steps[currentStepIndex];
                     descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
@@ -1014,12 +606,6 @@
                 descText.innerText = 'Complete previous steps first. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             }
         });
-
-        // Add hover feedback (optional)
-        if (CONFIG.enableHoverFeedback) {
-            viewer.addEventListener('mousemove', updateHoverFeedback);
-            viewer.addEventListener('touchmove', updateHoverFeedback);
-        }
 
         // ============================================
         // PLAYBACK FUNCTIONS
