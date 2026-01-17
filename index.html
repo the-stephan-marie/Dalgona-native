@@ -570,7 +570,16 @@
         
         // Function to find which node was hit using raycasting
         function findHitNode(clientX, clientY) {
-            if (!raycaster || !camera || !hierarchyNodes.length) {
+            if (!raycaster) {
+                console.error('Raycaster not initialized');
+                return null;
+            }
+            if (!camera) {
+                console.error('Camera not initialized');
+                return null;
+            }
+            if (!hierarchyNodes || hierarchyNodes.length === 0) {
+                console.error('No hierarchy nodes available');
                 return null;
             }
             
@@ -648,32 +657,41 @@
             
             // Try to sync camera with model-viewer's camera
             let threeCamera = null;
-            if (viewer.renderRoot && canvas) {
-                const renderer = canvas.__THREE__;
-                if (renderer) {
+            if (viewer.renderRoot) {
+                const canvas = viewer.renderRoot.querySelector('canvas');
+                if (canvas && canvas.__THREE__) {
+                    const renderer = canvas.__THREE__;
                     threeCamera = renderer.camera || renderer.scene?.children.find(child => child.isCamera);
                 }
             }
             
             // Update camera to match model-viewer's camera
-            if (threeCamera) {
-                // Copy camera properties
-                camera.position.copy(threeCamera.position);
-                camera.quaternion.copy(threeCamera.quaternion);
-                camera.fov = threeCamera.fov || camera.fov;
-                camera.aspect = threeCamera.aspect || (rect.width / rect.height);
-                camera.near = threeCamera.near || camera.near;
-                camera.far = threeCamera.far || camera.far;
-                
-                // Update matrices - CRITICAL for accurate raycasting
-                camera.updateProjectionMatrix();
-                camera.updateMatrixWorld(true); // Force update
-                
-                // Also update world matrix if available
-                if (threeCamera.matrixWorld) {
-                    camera.matrixWorld.copy(threeCamera.matrixWorld);
+            try {
+                if (threeCamera) {
+                    // Copy camera properties
+                    if (threeCamera.position) camera.position.copy(threeCamera.position);
+                    if (threeCamera.quaternion) camera.quaternion.copy(threeCamera.quaternion);
+                    camera.fov = threeCamera.fov || camera.fov;
+                    camera.aspect = threeCamera.aspect || (rect.width / rect.height);
+                    camera.near = threeCamera.near || camera.near;
+                    camera.far = threeCamera.far || camera.far;
+                    
+                    // Update matrices - CRITICAL for accurate raycasting
+                    camera.updateProjectionMatrix();
+                    camera.updateMatrixWorld(true); // Force update
+                    
+                    // Also update world matrix if available
+                    if (threeCamera.matrixWorld) {
+                        camera.matrixWorld.copy(threeCamera.matrixWorld);
+                    }
+                } else {
+                    // Fallback: update aspect ratio based on canvas/viewer size
+                    camera.aspect = rect.width / rect.height;
+                    camera.updateProjectionMatrix();
+                    camera.updateMatrixWorld(true);
                 }
-            } else {
+            } catch (cameraError) {
+                console.warn('Error syncing camera, using fallback:', cameraError);
                 // Fallback: update aspect ratio based on canvas/viewer size
                 camera.aspect = rect.width / rect.height;
                 camera.updateProjectionMatrix();
@@ -681,10 +699,37 @@
             }
             
             // Update raycaster with the tap coordinates
-            raycaster.setFromCamera(mouse, camera);
+            try {
+                raycaster.setFromCamera(mouse, camera);
+            } catch (raycastError) {
+                console.error('Error setting raycaster from camera:', raycastError);
+                console.error('Raycast error details:', {
+                    mouse: { x: mouse.x, y: mouse.y },
+                    camera: {
+                        position: camera.position,
+                        fov: camera.fov,
+                        aspect: camera.aspect
+                    }
+                });
+                return null;
+            }
             
             // Perform raycasting ONLY on interactive meshes
-            const intersects = raycaster.intersectObjects(interactiveMeshes, true);
+            let intersects;
+            try {
+                intersects = raycaster.intersectObjects(interactiveMeshes, true);
+            } catch (intersectError) {
+                console.error('Error during raycast intersection:', intersectError);
+                console.error('Intersect error details:', {
+                    interactiveMeshesCount: interactiveMeshes.length,
+                    raycaster: {
+                        ray: raycaster.ray,
+                        near: raycaster.near,
+                        far: raycaster.far
+                    }
+                });
+                return null;
+            }
             
             console.log('Raycast results:', {
                 rayOrigin: raycaster.ray.origin,
@@ -1129,7 +1174,13 @@
                 nodeName = findHitNode(clientX, clientY);
             } catch (error) {
                 console.error('Error in findHitNode:', error);
-                return;
+                console.error('Error details:', {
+                    message: error?.message,
+                    stack: error?.stack,
+                    name: error?.name,
+                    error: String(error)
+                });
+                return null;
             }
             
             // Log the node name for debugging (preserve the name)
