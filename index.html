@@ -414,14 +414,34 @@
             viewer.currentTime = frameToTime(1);
             viewer.pause();
             
-            // Access hierarchy and build mappings
-            setupHitDetection();
+            // Wait a bit for canvas to be properly sized
+            setTimeout(() => {
+                // Access hierarchy and build mappings
+                setupHitDetection();
+            }, 100);
         });
         
         // Also listen for scene-graph-ready event
         viewer.addEventListener('scene-graph-ready', () => {
             console.log('Scene graph ready');
-            setupHitDetection();
+            // Wait a bit for canvas to be properly sized
+            setTimeout(() => {
+                setupHitDetection();
+            }, 100);
+        });
+        
+        // Also check when the viewer is resized (canvas might be sized then)
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                console.log('Window resized, checking canvas size');
+                const canvas = viewer.renderRoot?.querySelector('canvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    console.log('Canvas size after resize:', { width: rect.width, height: rect.height });
+                }
+            }, 250);
         });
         
         function setupHitDetection() {
@@ -557,18 +577,45 @@
             // Get the canvas element for accurate coordinate calculation
             const canvas = viewer.renderRoot?.querySelector('canvas');
             let rect;
+            let usingCanvas = false;
             
+            // Try to use canvas rect first
             if (canvas) {
-                // Use canvas bounding rect for accurate coordinates
-                rect = canvas.getBoundingClientRect();
+                const canvasRect = canvas.getBoundingClientRect();
+                // Only use canvas if it has valid dimensions
+                if (canvasRect.width > 0 && canvasRect.height > 0) {
+                    rect = canvasRect;
+                    usingCanvas = true;
+                } else {
+                    console.warn('Canvas has zero size, using viewer rect', canvasRect);
+                    rect = viewer.getBoundingClientRect();
+                }
             } else {
-                // Fallback to viewer bounding rect
+                // Canvas not found, use viewer
+                console.warn('Canvas not found, using viewer rect');
                 rect = viewer.getBoundingClientRect();
+            }
+            
+            // Validate rect has valid dimensions
+            if (!rect || rect.width === 0 || rect.height === 0) {
+                console.error('Invalid rect dimensions - cannot raycast:', {
+                    rect,
+                    canvasFound: !!canvas,
+                    viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight },
+                    viewerRect: viewer.getBoundingClientRect()
+                });
+                return null;
             }
             
             // Calculate coordinates relative to the canvas/viewer
             const x = clientX - rect.left;
             const y = clientY - rect.top;
+            
+            // Validate coordinates are within bounds
+            if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+                console.warn('Click outside bounds:', { x, y, width: rect.width, height: rect.height });
+                // Still try to raycast, but log the issue
+            }
             
             // Convert to normalized device coordinates (-1 to +1)
             // Note: WebGL uses bottom-left origin, so we flip Y
@@ -576,12 +623,21 @@
             mouse.x = (x / rect.width) * 2 - 1;
             mouse.y = -((y / rect.height) * 2 - 1); // Flip Y coordinate
             
+            // Validate normalized coordinates
+            if (isNaN(mouse.x) || isNaN(mouse.y) || !isFinite(mouse.x) || !isFinite(mouse.y)) {
+                console.error('Invalid normalized coordinates:', { mouse, x, y, rect });
+                return null;
+            }
+            
             // Debug logging
             console.log('Raycast from tap:', {
                 tapCoords: { clientX, clientY },
-                canvasRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
                 relativeCoords: { x, y },
-                normalizedCoords: { x: mouse.x, y: mouse.y }
+                normalizedCoords: { x: mouse.x, y: mouse.y },
+                canvasFound: !!canvas,
+                usingCanvas: usingCanvas,
+                viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight }
             });
             
             // Get only interactive meshes (exclude ground, table, etc.)
