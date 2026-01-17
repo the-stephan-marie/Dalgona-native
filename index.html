@@ -698,6 +698,22 @@
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
         
+        // Check if WebXR is available (for desktop AR)
+        async function checkWebXRSupport() {
+            if (!navigator.xr) {
+                return false;
+            }
+            
+            try {
+                // Check if immersive-ar session is supported
+                const supported = await navigator.xr.isSessionSupported('immersive-ar');
+                return supported;
+            } catch (e) {
+                console.log('WebXR check failed:', e);
+                return false;
+            }
+        }
+        
         // Handle AR button visibility and errors
         const arButton = document.querySelector('#ar-button');
         
@@ -745,8 +761,17 @@
                 console.log('=== END AR FAILURE DIAGNOSTICS ===');
             } else if (status === 'not-presenting') {
                 console.log('AR available but not active');
+                // Make sure button is visible if AR is available
+                if (mode === 'webxr' && !isMobileDevice()) {
+                    console.log('WebXR mode detected - ensuring AR button is visible');
+                    arButton.style.display = '';
+                }
             } else if (status === 'presenting') {
                 console.log('AR is active!');
+                console.log('AR mode:', mode);
+                if (mode === 'webxr') {
+                    console.log('✅ WebXR AR session started successfully!');
+                }
             }
         });
         
@@ -755,13 +780,14 @@
             if (event.message && event.message.includes('intent://')) {
                 console.warn('AR Intent URL not supported on this device');
                 if (!isMobileDevice()) {
-                    console.info('AR is only available on mobile devices. Please open this page on your phone or tablet.');
+                    console.info('Scene Viewer (Android) requires a mobile device.');
+                    console.info('WebXR AR may still be available - try clicking the AR button.');
                 }
             }
         });
         
         // Check AR availability after model loads
-        viewer.addEventListener('load', () => {
+        viewer.addEventListener('load', async () => {
             console.log('Model loaded, checking AR availability...');
             console.log('AR available:', viewer.arAvailable);
             console.log('AR supported:', viewer.arSupported);
@@ -770,13 +796,44 @@
             console.log('Model source:', viewer.src);
             console.log('iOS source:', viewer.iosSrc);
             
-            setTimeout(() => {
-                if (!viewer.arAvailable && !isMobileDevice()) {
+            const isMobile = isMobileDevice();
+            
+            // Wait a bit longer for AR to initialize, especially WebXR on desktop
+            setTimeout(async () => {
+                // Check WebXR support for desktop
+                let webXRSupported = false;
+                if (!isMobile) {
+                    webXRSupported = await checkWebXRSupport();
+                    console.log('WebXR support check:', webXRSupported);
+                    console.log('Protocol:', location.protocol);
+                    console.log('Hostname:', location.hostname);
+                    
+                    if (webXRSupported) {
+                        console.log('✅ WebXR is available! Desktop AR should work.');
+                        console.log('Requirements:');
+                        console.log('- HTTPS or localhost:', location.protocol === 'https:' || location.hostname === 'localhost');
+                        console.log('- Chrome/Edge browser recommended');
+                        console.log('- Camera permissions will be requested');
+                    } else {
+                        console.log('⚠️ WebXR not available on desktop');
+                        console.log('To enable WebXR:');
+                        console.log('1. Use Chrome or Edge browser');
+                        console.log('2. Ensure HTTPS (or localhost)');
+                        console.log('3. Check chrome://flags/#webxr-incubations (if needed)');
+                    }
+                }
+                
+                // Only hide button if AR is not available AND WebXR is not supported (on desktop)
+                if (!viewer.arAvailable && !isMobile && !webXRSupported) {
+                    console.log('Hiding AR button - no AR support detected');
                     arButton.style.display = 'none';
+                } else if (!viewer.arAvailable && !isMobile && webXRSupported) {
+                    console.log('Keeping AR button visible - WebXR detected');
+                    arButton.style.display = '';
                 }
                 
                 // Log AR capabilities
-                if (isMobileDevice()) {
+                if (isMobile) {
                     console.log('Mobile device detected');
                     console.log('AR available:', viewer.arAvailable);
                     console.log('AR supported:', viewer.arSupported);
@@ -790,8 +847,15 @@
                         console.log('4. Camera permissions not granted');
                         console.log('5. Device does not support AR');
                     }
+                } else {
+                    console.log('Desktop device detected');
+                    console.log('AR available (model-viewer):', viewer.arAvailable);
+                    console.log('WebXR available:', webXRSupported);
+                    if (viewer.arAvailable || webXRSupported) {
+                        console.log('✅ AR should work on this desktop browser');
+                    }
                 }
-            }, 1000);
+            }, 2000); // Increased timeout to allow WebXR to initialize
         });
 
         // ============================================
