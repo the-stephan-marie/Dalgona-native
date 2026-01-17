@@ -92,7 +92,7 @@
         id="ar-viewer"
         src="assets/Dalgona-OneTake_0001.glb"
         ar
-        ar-modes="scene-viewer quick-look webxr"
+        ar-modes="webxr scene-viewer quick-look"
         camera-controls
         disable-tap
         shadow-intensity="1.2"
@@ -133,14 +133,10 @@
                 font-family: 'Courier New', monospace;
                 font-size: 11px;
                 padding: 8px;
-                z-index: 999999;
+                z-index: 10000;
                 display: none;
                 border-top: 2px solid #0f0;
                 box-shadow: 0 -2px 10px rgba(0, 255, 0, 0.3);
-                pointer-events: auto;
-                -webkit-transform: translateZ(0);
-                transform: translateZ(0);
-                will-change: transform;
             `;
             
             // Add close button
@@ -159,8 +155,7 @@
                 cursor: pointer;
                 font-size: 14px;
                 font-weight: bold;
-                z-index: 1000000;
-                pointer-events: auto;
+                z-index: 10001;
             `;
             closeBtn.onclick = () => {
                 consoleDiv.style.display = 'none';
@@ -181,8 +176,7 @@
                 padding: 2px 8px;
                 cursor: pointer;
                 font-size: 10px;
-                z-index: 1000000;
-                pointer-events: auto;
+                z-index: 10001;
             `;
             clearBtn.onclick = () => {
                 const logs = consoleDiv.querySelectorAll('div:not(button)');
@@ -190,33 +184,7 @@
             };
             consoleDiv.appendChild(clearBtn);
             
-            // Append to body AND ensure it stays on top
             document.body.appendChild(consoleDiv);
-            
-            // Force console to stay visible in AR mode by re-appending when AR starts
-            const ensureConsoleVisible = () => {
-                // Re-append to ensure it's on top of AR view
-                if (consoleDiv.parentNode !== document.body) {
-                    document.body.appendChild(consoleDiv);
-                }
-                // Force higher z-index
-                consoleDiv.style.zIndex = '999999';
-                consoleDiv.style.position = 'fixed';
-            };
-            
-            // Listen for AR status changes
-            const viewer = document.getElementById('ar-viewer');
-            if (viewer) {
-                viewer.addEventListener('ar-status', (event) => {
-                    if (event.detail.status === 'presenting') {
-                        // AR is active - ensure console is visible
-                        setTimeout(() => {
-                            ensureConsoleVisible();
-                            console.log('AR mode active - console should be visible');
-                        }, 100);
-                    }
-                });
-            }
             
             // Store original console methods
             const originalLog = console.log;
@@ -227,9 +195,6 @@
             function addToScreen(type, ...args) {
                 const consoleDiv = document.getElementById('mobile-console');
                 if (!consoleDiv) return;
-                
-                // Ensure console is in DOM and visible
-                ensureConsoleVisible();
                 
                 const message = args.map(arg => {
                     if (arg === null) return 'null';
@@ -251,7 +216,6 @@
                     word-wrap: break-word;
                     color: ${type === 'error' ? '#ff4444' : type === 'warn' ? '#ffaa00' : type === 'info' ? '#00aaff' : '#00ff00'};
                     white-space: pre-wrap;
-                    pointer-events: none;
                 `;
                 
                 const timestamp = new Date().toLocaleTimeString();
@@ -262,7 +226,6 @@
                 // Auto-show console for errors and warnings
                 if (type === 'error' || type === 'warn') {
                     consoleDiv.style.display = 'block';
-                    ensureConsoleVisible();
                 }
             }
             
@@ -287,11 +250,9 @@
                 addToScreen('info', ...args);
             };
             
-            // Toggle console with triple tap (works even in AR)
+            // Toggle console with triple tap
             let tapCount = 0;
             let tapTimer = null;
-            
-            // Listen on document to catch all touches, even in AR
             document.addEventListener('touchstart', (e) => {
                 // Don't trigger on UI elements
                 if (e.target.tagName === 'BUTTON' || e.target.closest('#ui-layer')) {
@@ -304,16 +265,12 @@
                     if (tapCount === 3) {
                         const consoleDiv = document.getElementById('mobile-console');
                         if (consoleDiv) {
-                            const isVisible = consoleDiv.style.display !== 'none';
-                            consoleDiv.style.display = isVisible ? 'none' : 'block';
-                            if (!isVisible) {
-                                ensureConsoleVisible();
-                            }
+                            consoleDiv.style.display = consoleDiv.style.display === 'none' ? 'block' : 'none';
                         }
                     }
                     tapCount = 0;
                 }, 400);
-            }, { capture: true }); // Use capture phase to catch events before AR handles them
+            });
             
             // Also allow keyboard toggle (for desktop testing)
             document.addEventListener('keydown', (e) => {
@@ -321,24 +278,12 @@
                     e.preventDefault();
                     const consoleDiv = document.getElementById('mobile-console');
                     if (consoleDiv) {
-                        const isVisible = consoleDiv.style.display !== 'none';
-                        consoleDiv.style.display = isVisible ? 'none' : 'block';
-                        if (!isVisible) {
-                            ensureConsoleVisible();
-                        }
+                        consoleDiv.style.display = consoleDiv.style.display === 'none' ? 'block' : 'none';
                     }
                 }
             });
             
             console.log('On-screen console initialized. Triple-tap to toggle, or press Ctrl+`');
-            
-            // Periodically ensure console stays visible (for AR mode)
-            setInterval(() => {
-                const consoleDiv = document.getElementById('mobile-console');
-                if (consoleDiv && consoleDiv.style.display !== 'none') {
-                    ensureConsoleVisible();
-                }
-            }, 1000);
         }
         
         // Initialize console immediately
@@ -480,17 +425,35 @@
         });
         
         function setupHitDetection() {
+            console.log('Setting up hit detection...', {
+                modelLoaded: viewer.loaded,
+                hasTHREE: typeof THREE !== 'undefined'
+            });
+            
+            // Wait for model to load
+            if (!viewer.loaded) {
+                console.log('Model not loaded yet, waiting...');
+                viewer.addEventListener('load', () => {
+                    console.log('Model loaded, retrying hit detection setup...');
+                    setupHitDetection();
+                }, { once: true });
+                return;
+            }
+            
             // Import Three.js for raycasting
             if (!window.THREE) {
+                console.log('Three.js not found, importing...');
                 import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js').then((THREE_Module) => {
                     window.THREE = THREE_Module;
                     THREE = THREE_Module;
+                    console.log('Three.js imported successfully');
                     initializeHitDetection();
                 }).catch((err) => {
                     console.error('Failed to import Three.js:', err);
                 });
             } else {
                 THREE = window.THREE;
+                console.log('Three.js already available');
                 initializeHitDetection();
             }
         }
@@ -501,20 +464,28 @@
                 return;
             }
             
+            console.log('Initializing hit detection...');
+            
             // Access hierarchy from viewer.model
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hierarchySym = symbols.find(s => s.toString().includes('hierarchy'));
             
             if (!hierarchySym) {
                 console.error('Could not find hierarchy Symbol');
+                console.log('Available symbols:', symbols.map(s => s.toString()));
                 return;
             }
             
             const hierarchy = viewer.model[hierarchySym];
             hierarchyNodes = hierarchy.filter(node => node.mesh); // Only nodes with meshes
             
+            console.log('Found hierarchy nodes:', hierarchyNodes.length);
+            console.log('Node names:', hierarchyNodes.map(n => n.name).filter(Boolean));
+            
             // Build flexible node-to-step mapping
             buildFlexibleNodeMapping(hierarchyNodes);
+            
+            console.log('Node-to-step mapping:', Array.from(nodeToStepMap.entries()));
             
             // Initialize raycasting
             raycaster = new THREE.Raycaster();
@@ -535,8 +506,13 @@
                 if (canvas && canvas.__THREE__) {
                     window.modelViewerScene = canvas.__THREE__.scene;
                     window.modelViewerCamera = canvas.__THREE__.camera;
+                    console.log('Found model-viewer scene and camera');
+                } else {
+                    console.warn('Could not find model-viewer canvas or THREE context');
                 }
             }
+            
+            console.log('✅ Hit detection initialized successfully!');
         }
         
         function buildFlexibleNodeMapping(nodes) {
@@ -578,20 +554,35 @@
                 return null;
             }
             
-            // Get normalized device coordinates
-            const rect = viewer.getBoundingClientRect();
+            // Get the canvas element for accurate coordinate calculation
+            const canvas = viewer.renderRoot?.querySelector('canvas');
+            let rect;
             
-            // Account for any page scroll offset
+            if (canvas) {
+                // Use canvas bounding rect for accurate coordinates
+                rect = canvas.getBoundingClientRect();
+            } else {
+                // Fallback to viewer bounding rect
+                rect = viewer.getBoundingClientRect();
+            }
+            
+            // Calculate coordinates relative to the canvas/viewer
             const x = clientX - rect.left;
             const y = clientY - rect.top;
             
             // Convert to normalized device coordinates (-1 to +1)
+            // Note: WebGL uses bottom-left origin, so we flip Y
             const mouse = new THREE.Vector2();
             mouse.x = (x / rect.width) * 2 - 1;
-            mouse.y = -(y / rect.height) * 2 + 1;
+            mouse.y = -((y / rect.height) * 2 - 1); // Flip Y coordinate
             
-            // Debug logging (remove after testing)
-            console.log('Click coords:', { clientX, clientY, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, normalized: { x: mouse.x, y: mouse.y } });
+            // Debug logging
+            console.log('Raycast from tap:', {
+                tapCoords: { clientX, clientY },
+                canvasRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                relativeCoords: { x, y },
+                normalizedCoords: { x: mouse.x, y: mouse.y }
+            });
             
             // Get only interactive meshes (exclude ground, table, etc.)
             const interactiveMeshes = hierarchyNodes
@@ -605,13 +596,14 @@
                 });
             
             if (interactiveMeshes.length === 0) {
+                console.warn('No interactive meshes found');
                 return null;
             }
             
             // Try to sync camera with model-viewer's camera
             let threeCamera = null;
-            if (viewer.renderRoot) {
-                const renderer = viewer.renderRoot.querySelector('canvas')?.__THREE__;
+            if (viewer.renderRoot && canvas) {
+                const renderer = canvas.__THREE__;
                 if (renderer) {
                     threeCamera = renderer.camera || renderer.scene?.children.find(child => child.isCamera);
                 }
@@ -619,25 +611,41 @@
             
             // Update camera to match model-viewer's camera
             if (threeCamera) {
+                // Copy camera properties
                 camera.position.copy(threeCamera.position);
                 camera.quaternion.copy(threeCamera.quaternion);
-                camera.fov = threeCamera.fov;
-                camera.aspect = threeCamera.aspect;
-                camera.near = threeCamera.near;
-                camera.far = threeCamera.far;
+                camera.fov = threeCamera.fov || camera.fov;
+                camera.aspect = threeCamera.aspect || (rect.width / rect.height);
+                camera.near = threeCamera.near || camera.near;
+                camera.far = threeCamera.far || camera.far;
+                
+                // Update matrices - CRITICAL for accurate raycasting
                 camera.updateProjectionMatrix();
-                camera.updateMatrixWorld();
+                camera.updateMatrixWorld(true); // Force update
+                
+                // Also update world matrix if available
+                if (threeCamera.matrixWorld) {
+                    camera.matrixWorld.copy(threeCamera.matrixWorld);
+                }
             } else {
-                // Fallback: update aspect ratio
-                camera.aspect = viewer.clientWidth / viewer.clientHeight;
+                // Fallback: update aspect ratio based on canvas/viewer size
+                camera.aspect = rect.width / rect.height;
                 camera.updateProjectionMatrix();
+                camera.updateMatrixWorld(true);
             }
             
-            // Update raycaster
+            // Update raycaster with the tap coordinates
             raycaster.setFromCamera(mouse, camera);
             
             // Perform raycasting ONLY on interactive meshes
             const intersects = raycaster.intersectObjects(interactiveMeshes, true);
+            
+            console.log('Raycast results:', {
+                rayOrigin: raycaster.ray.origin,
+                rayDirection: raycaster.ray.direction,
+                intersections: intersects.length,
+                hitObjects: intersects.map(i => i.object.name)
+            });
             
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object;
@@ -655,8 +663,13 @@
                 });
                 
                 if (hitNode) {
+                    console.log('✅ Hit detected:', hitNode.name);
                     return hitNode.name;
+                } else {
+                    console.warn('Hit mesh found but no matching node:', hitMesh.name);
                 }
+            } else {
+                console.log('❌ No intersections found');
             }
             
             return null;
@@ -772,10 +785,15 @@
         // Handle AR button visibility and errors
         const arButton = document.querySelector('#ar-button');
         
+        // Track current AR mode
+        let currentARMode = null;
+        let isInQuickLook = false;
+        
         // Listen for AR status changes with detailed logging
         viewer.addEventListener('ar-status', (event) => {
             const status = event.detail.status;
             const mode = event.detail.mode;
+            currentARMode = mode;
             
             console.log('AR status:', status);
             console.log('AR mode:', mode);
@@ -816,6 +834,7 @@
                 console.log('=== END AR FAILURE DIAGNOSTICS ===');
             } else if (status === 'not-presenting') {
                 console.log('AR available but not active');
+                isInQuickLook = false;
                 // Make sure button is visible if AR is available
                 if (mode === 'webxr' && !isMobileDevice()) {
                     console.log('WebXR mode detected - ensuring AR button is visible');
@@ -824,8 +843,28 @@
             } else if (status === 'presenting') {
                 console.log('AR is active!');
                 console.log('AR mode:', mode);
-                if (mode === 'webxr') {
+                
+                if (mode === 'quick-look') {
+                    isInQuickLook = true;
+                    console.warn('⚠️ QUICK LOOK MODE ACTIVE');
+                    console.warn('⚠️ Quick Look does NOT support JavaScript interactions!');
+                    console.warn('⚠️ Tap-to-advance animations will NOT work in Quick Look.');
+                    console.warn('⚠️ Quick Look is a native iOS app - your JavaScript code does not run there.');
+                    console.warn('💡 Tip: Use WebXR mode instead for interactive AR (if available).');
+                    
+                    // Show user-friendly message
+                    setTimeout(() => {
+                        descText.innerText = 'Quick Look mode: Interactions disabled. Use WebXR for interactive AR.';
+                        titleText.innerText = 'Quick Look Active';
+                    }, 500);
+                } else if (mode === 'webxr') {
+                    isInQuickLook = false;
                     console.log('✅ WebXR AR session started successfully!');
+                    console.log('✅ JavaScript interactions ARE supported in WebXR mode.');
+                } else if (mode === 'scene-viewer') {
+                    isInQuickLook = false;
+                    console.log('✅ Scene Viewer AR active (Android)');
+                    console.warn('⚠️ Scene Viewer may have limited JavaScript support.');
                 }
             }
         });
@@ -939,11 +978,32 @@
 
         // OBJECT-SPECIFIC CLICK HANDLER USING RAYCASTING
         viewer.addEventListener('click', (event) => {
+            console.log('Click event fired!', {
+                target: event.target,
+                type: event.type,
+                isInQuickLook: isInQuickLook,
+                currentARMode: currentARMode,
+                hasRaycaster: !!raycaster,
+                hierarchyNodesCount: hierarchyNodes.length
+            });
+            
+            // Warn if in Quick Look mode
+            if (isInQuickLook) {
+                console.warn('⚠️ Click detected but Quick Look does not support JavaScript interactions');
+                return;
+            }
+            
             // Ignore if animating (unless it's a looping step)
-            if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) return;
+            if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) {
+                console.log('Ignoring click - animation in progress');
+                return;
+            }
             
             // Ignore AR button clicks
-            if (event.target.id === 'ar-button') return;
+            if (event.target && (event.target.id === 'ar-button' || event.target.closest('#ar-button'))) {
+                console.log('Ignoring click - AR button');
+                return;
+            }
             
             // Get coordinates - handle both mouse and touch events
             let clientX, clientY;
@@ -961,15 +1021,32 @@
                 clientY = event.clientY;
             }
             
+            console.log('Click coordinates:', { clientX, clientY });
+            
+            // Check if raycasting is ready
+            if (!raycaster || !hierarchyNodes.length) {
+                console.warn('⚠️ Raycasting not ready:', {
+                    hasRaycaster: !!raycaster,
+                    hierarchyNodesCount: hierarchyNodes.length
+                });
+                descText.innerText = 'Loading... Please wait for model to initialize.';
+                return;
+            }
+            
             // Use raycasting to find hit node
             let nodeName = null;
-            if (raycaster && hierarchyNodes.length > 0) {
+            try {
                 nodeName = findHitNode(clientX, clientY);
+            } catch (error) {
+                console.error('Error in findHitNode:', error);
+                return;
             }
             
             // Log the node name for debugging (preserve the name)
             if (nodeName) {
-                console.log('Hit node:', nodeName);
+                console.log('✅ Hit node:', nodeName);
+            } else {
+                console.log('❌ No node hit at coordinates:', { clientX, clientY });
             }
             
             if (!nodeName) {
@@ -977,15 +1054,19 @@
                 if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
                     const stepData = CONFIG.steps[currentStepIndex];
                     descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
+                } else {
+                    descText.innerText = 'Tap an object to start!';
                 }
                 return;
             }
             
             // Find which step this node belongs to
             const objectStepIndex = getStepIndexForNode(nodeName);
+            console.log('Node maps to step:', objectStepIndex);
             
             if (objectStepIndex === -1) {
                 // Clicked node is not interactive
+                console.log('Node is not in interactive objects list:', nodeName);
                 if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
                     const stepData = CONFIG.steps[currentStepIndex];
                     descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
@@ -998,14 +1079,28 @@
             
             if (objectStepIndex === expectedStepIndex) {
                 // Correct object clicked - advance!
+                console.log('✅ Correct object clicked! Advancing to step', expectedStepIndex);
                 playNextStep();
             } else if (objectStepIndex < expectedStepIndex) {
                 // Clicked an object from a previous step
+                console.log('⚠️ Clicked previous step object');
                 descText.innerText = 'This step has already been completed. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             } else {
                 // Clicked an object from a future step
+                console.log('⚠️ Clicked future step object');
                 descText.innerText = 'Complete previous steps first. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
             }
+        });
+        
+        // Also listen for touchstart/touchend to catch mobile taps
+        viewer.addEventListener('touchstart', (event) => {
+            console.log('Touchstart event fired');
+            // Let the click handler process it
+        });
+        
+        viewer.addEventListener('touchend', (event) => {
+            console.log('Touchend event fired');
+            // Let the click handler process it
         });
 
 
@@ -1049,6 +1144,22 @@
 
         viewer.addEventListener('load', () => {
             console.log('Model loaded successfully');
+            console.log('Click handler ready:', {
+                hasRaycaster: !!raycaster,
+                hierarchyNodesCount: hierarchyNodes.length,
+                currentStepIndex: currentStepIndex,
+                totalSteps: CONFIG.steps.length
+            });
+            
+            // Test click detection setup
+            if (!raycaster || !hierarchyNodes.length) {
+                console.warn('⚠️ Click detection not fully initialized. Retrying...');
+                setTimeout(() => {
+                    setupHitDetection();
+                }, 500);
+            } else {
+                console.log('✅ Click detection ready! Try tapping objects.');
+            }
         });
 
         // ============================================
