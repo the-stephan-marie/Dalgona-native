@@ -685,22 +685,98 @@
                         camera.matrixWorld.copy(threeCamera.matrixWorld);
                     }
                 } else {
-                    // Fallback: update aspect ratio based on canvas/viewer size
+                    // Fallback: Calculate camera position from model-viewer's camera-orbit
+                    // model-viewer uses spherical coordinates: "theta phi radius"
+                    // Try to get camera-orbit from the attribute or property
+                    const cameraOrbitAttr = viewer.getAttribute('camera-orbit');
+                    const cameraOrbitProp = viewer.cameraOrbit || viewer.__cameraOrbit;
+                    const cameraOrbit = cameraOrbitAttr || cameraOrbitProp || '0deg 75deg 105%';
+                    
+                    console.log('Camera orbit values:', {
+                        attr: cameraOrbitAttr,
+                        prop: cameraOrbitProp,
+                        using: cameraOrbit
+                    });
+                    
+                    // Parse camera orbit (format: "theta phi radius")
+                    // Can be "0deg 75deg 105%" or "0deg 75deg 1.05m" or similar
+                    const orbitMatch = cameraOrbit.match(/([\d.-]+)deg\s+([\d.-]+)deg\s+([\d.]+)(%|m|)/);
+                    if (orbitMatch) {
+                        const theta = parseFloat(orbitMatch[1]) * Math.PI / 180; // azimuth
+                        const phi = parseFloat(orbitMatch[2]) * Math.PI / 180;   // polar angle
+                        const radiusValue = parseFloat(orbitMatch[3]);
+                        const radiusUnit = orbitMatch[4];
+                        
+                        let radius;
+                        if (radiusUnit === '%') {
+                            // Percentage - estimate model size
+                            const estimatedModelSize = 5; // Adjust based on your model
+                            radius = estimatedModelSize * (radiusValue / 100);
+                        } else {
+                            // Absolute value (meters or unitless)
+                            radius = radiusValue;
+                        }
+                        
+                        // Convert spherical to cartesian coordinates
+                        // Note: model-viewer uses different coordinate system
+                        // phi is measured from +Y axis (0 = top, 90 = horizontal)
+                        const x = radius * Math.sin(phi) * Math.sin(theta);
+                        const y = radius * Math.cos(phi);
+                        const z = radius * Math.sin(phi) * Math.cos(theta);
+                        
+                        camera.position.set(x, y, z);
+                        camera.lookAt(0, 0, 0); // Look at origin (model center)
+                        
+                        console.log('Calculated camera position from orbit:', {
+                            orbit: cameraOrbit,
+                            parsed: { theta: theta * 180 / Math.PI, phi: phi * 180 / Math.PI, radius },
+                            position: { x, y, z }
+                        });
+                    } else {
+                        // Ultimate fallback: position camera looking at origin from reasonable distance
+                        // Default model-viewer camera is typically at ~5 units away
+                        camera.position.set(0, 3, 5);
+                        camera.lookAt(0, 0, 0);
+                        console.warn('Could not parse camera orbit, using default position:', {
+                            orbit: cameraOrbit,
+                            defaultPos: { x: 0, y: 3, z: 5 }
+                        });
+                    }
+                    
+                    // Update aspect ratio and matrices
                     camera.aspect = rect.width / rect.height;
+                    camera.fov = 45; // Default FOV
                     camera.updateProjectionMatrix();
                     camera.updateMatrixWorld(true);
                 }
             } catch (cameraError) {
                 console.warn('Error syncing camera, using fallback:', cameraError);
-                // Fallback: update aspect ratio based on canvas/viewer size
+                // Ultimate fallback: position camera looking at origin
+                camera.position.set(0, 0, 5);
+                camera.lookAt(0, 0, 0);
                 camera.aspect = rect.width / rect.height;
                 camera.updateProjectionMatrix();
                 camera.updateMatrixWorld(true);
             }
             
+            // Log camera state before raycasting
+            console.log('Camera state before raycast:', {
+                position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+                fov: camera.fov,
+                aspect: camera.aspect,
+                matrixWorldNeedsUpdate: camera.matrixWorldNeedsUpdate
+            });
+            
             // Update raycaster with the tap coordinates
             try {
                 raycaster.setFromCamera(mouse, camera);
+                
+                // Log ray details after setting
+                console.log('Ray details after setFromCamera:', {
+                    origin: { x: raycaster.ray.origin.x, y: raycaster.ray.origin.y, z: raycaster.ray.origin.z },
+                    direction: { x: raycaster.ray.direction.x, y: raycaster.ray.direction.y, z: raycaster.ray.direction.z },
+                    normalizedMouse: { x: mouse.x, y: mouse.y }
+                });
             } catch (raycastError) {
                 console.error('Error setting raycaster from camera:', raycastError);
                 console.error('Raycast error details:', {
