@@ -815,8 +815,11 @@
                 if (!viewer.loaded) {
                     console.error('❌ Model not loaded - AR cannot initialize');
                 }
-                if (!viewer.arSupported) {
+                // Only warn if explicitly false, not if undefined (might still be checking)
+                if (viewer.arSupported === false) {
                     console.error('❌ AR not supported on this device/browser');
+                } else if (viewer.arSupported === undefined) {
+                    console.log('ℹ️ AR support status still being determined...');
                 }
                 if (viewer.arModes && viewer.arModes.length === 0) {
                     console.error('❌ No AR modes available');
@@ -883,17 +886,32 @@
         // Check AR availability after model loads
         viewer.addEventListener('load', async () => {
             console.log('Model loaded, checking AR availability...');
-            console.log('AR available:', viewer.arAvailable);
-            console.log('AR supported:', viewer.arSupported);
-            console.log('AR modes:', viewer.arModes);
+            console.log('AR modes configured:', viewer.arModes);
             console.log('Model loaded:', viewer.loaded);
             console.log('Model source:', viewer.src);
             console.log('iOS source:', viewer.iosSrc);
             
             const isMobile = isMobileDevice();
             
-            // Wait a bit longer for AR to initialize, especially WebXR on desktop
-            setTimeout(async () => {
+            // Function to check AR availability more reliably
+            const checkARAvailability = async () => {
+                // Check properties (they might be undefined initially)
+                const arAvailable = viewer.arAvailable;
+                const arSupported = viewer.arSupported;
+                
+                console.log('AR availability check:', {
+                    arAvailable: arAvailable,
+                    arSupported: arSupported,
+                    arModes: viewer.arModes,
+                    isMobile: isMobile,
+                    userAgent: navigator.userAgent
+                });
+                
+                // On iOS, Quick Look might be available even if arAvailable is undefined
+                // Check if AR button is actually functional by checking if it's in the DOM
+                const arButtonSlot = viewer.querySelector('[slot="ar-button"]');
+                const hasARButton = !!arButtonSlot;
+                
                 // Check WebXR support for desktop
                 let webXRSupported = false;
                 if (!isMobile) {
@@ -917,39 +935,65 @@
                     }
                 }
                 
-                // Only hide button if AR is not available AND WebXR is not supported (on desktop)
-                if (!viewer.arAvailable && !isMobile && !webXRSupported) {
-                    console.log('Hiding AR button - no AR support detected');
+                // Only hide button if AR is definitely not available AND WebXR is not supported (on desktop)
+                if (arAvailable === false && !isMobile && !webXRSupported) {
+                    console.log('Hiding AR button - AR explicitly not available');
                     arButton.style.display = 'none';
-                } else if (!viewer.arAvailable && !isMobile && webXRSupported) {
-                    console.log('Keeping AR button visible - WebXR detected');
+                } else {
+                    // Keep button visible - either AR is available, or we're on mobile (where Quick Look might work)
+                    console.log('Keeping AR button visible');
                     arButton.style.display = '';
                 }
                 
-                // Log AR capabilities
+                // Log AR capabilities (only warn if explicitly false, not if undefined)
                 if (isMobile) {
                     console.log('Mobile device detected');
-                    console.log('AR available:', viewer.arAvailable);
-                    console.log('AR supported:', viewer.arSupported);
+                    console.log('AR available:', arAvailable !== undefined ? arAvailable : 'checking...');
+                    console.log('AR supported:', arSupported !== undefined ? arSupported : 'checking...');
                     
-                    if (!viewer.arAvailable) {
-                        console.warn('AR not available on this mobile device');
+                    // On iOS, Quick Look might work even if arAvailable is undefined
+                    if (arAvailable === false) {
+                        console.warn('⚠️ AR explicitly not available on this mobile device');
                         console.log('Possible reasons:');
                         console.log('1. Browser does not support AR');
                         console.log('2. Model file too large');
                         console.log('3. Missing USDZ file (for iOS)');
                         console.log('4. Camera permissions not granted');
                         console.log('5. Device does not support AR');
+                    } else if (arAvailable === undefined) {
+                        console.log('ℹ️ AR availability still being determined...');
+                        console.log('On iOS, Quick Look may still work even if this is undefined.');
+                        console.log('Try clicking the AR button to test.');
+                    } else {
+                        console.log('✅ AR appears to be available!');
                     }
                 } else {
                     console.log('Desktop device detected');
-                    console.log('AR available (model-viewer):', viewer.arAvailable);
+                    console.log('AR available (model-viewer):', arAvailable !== undefined ? arAvailable : 'checking...');
                     console.log('WebXR available:', webXRSupported);
-                    if (viewer.arAvailable || webXRSupported) {
+                    if (arAvailable === true || webXRSupported) {
                         console.log('✅ AR should work on this desktop browser');
                     }
                 }
-            }, 2000); // Increased timeout to allow WebXR to initialize
+            };
+            
+            // Check immediately
+            await checkARAvailability();
+            
+            // Also check after a delay (AR capabilities might be determined asynchronously)
+            setTimeout(async () => {
+                console.log('Re-checking AR availability after delay...');
+                await checkARAvailability();
+            }, 2000);
+            
+            // Also check when AR status changes
+            viewer.addEventListener('ar-status', async (event) => {
+                if (event.detail.status === 'not-presenting') {
+                    // AR is available but not active - this confirms AR works
+                    console.log('✅ AR confirmed available (status: not-presenting)');
+                    arButton.style.display = '';
+                }
+            }, { once: true });
         });
 
         // ============================================
