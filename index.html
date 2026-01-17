@@ -745,7 +745,9 @@
                     
                     // Update aspect ratio and matrices
                     camera.aspect = rect.width / rect.height;
-                    camera.fov = 45; // Default FOV
+                    // Get FOV from model-viewer (field-of-view attribute or property)
+                    const fieldOfView = viewer.fieldOfView || viewer.__fieldOfView || viewer.getAttribute('field-of-view');
+                    camera.fov = fieldOfView ? parseFloat(fieldOfView) : 45; // Default to 45 if not available
                     camera.updateProjectionMatrix();
                     camera.updateMatrixWorld(true);
                 }
@@ -755,6 +757,9 @@
                 camera.position.set(0, 0, 5);
                 camera.lookAt(0, 0, 0);
                 camera.aspect = rect.width / rect.height;
+                // Get FOV from model-viewer (field-of-view attribute or property)
+                const fieldOfView = viewer.fieldOfView || viewer.__fieldOfView || viewer.getAttribute('field-of-view');
+                camera.fov = fieldOfView ? parseFloat(fieldOfView) : 45; // Default to 45 if not available
                 camera.updateProjectionMatrix();
                 camera.updateMatrixWorld(true);
             }
