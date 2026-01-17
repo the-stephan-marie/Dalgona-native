@@ -574,58 +574,49 @@
                 return null;
             }
             
-            // Get the canvas element for accurate coordinate calculation
-            const canvas = viewer.renderRoot?.querySelector('canvas');
-            let rect;
-            let usingCanvas = false;
-            
-            // Try to use canvas rect first
-            if (canvas) {
-                const canvasRect = canvas.getBoundingClientRect();
-                // Only use canvas if it has valid dimensions
-                if (canvasRect.width > 0 && canvasRect.height > 0) {
-                    rect = canvasRect;
-                    usingCanvas = true;
-                } else {
-                    console.warn('Canvas has zero size, using viewer rect', canvasRect);
-                    rect = viewer.getBoundingClientRect();
-                }
-            } else {
-                // Canvas not found, use viewer
-                console.warn('Canvas not found, using viewer rect');
-                rect = viewer.getBoundingClientRect();
-            }
+            // IMPORTANT: Use viewer.getBoundingClientRect() directly as per documentation
+            // This ensures coordinates match the visible rendering area
+            // The canvas might be in shadow DOM with different positioning, so use viewer instead
+            const rect = viewer.getBoundingClientRect();
             
             // Validate rect has valid dimensions
             if (!rect || rect.width === 0 || rect.height === 0) {
                 console.error('Invalid rect dimensions - cannot raycast:', {
                     rect,
-                    canvasFound: !!canvas,
-                    viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight },
-                    viewerRect: viewer.getBoundingClientRect()
+                    viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight }
                 });
                 return null;
             }
             
-            // Calculate coordinates relative to the canvas/viewer
-            const x = clientX - rect.left;
-            const y = clientY - rect.top;
-            
-            // Validate coordinates are within bounds
-            if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
-                console.warn('Click outside bounds:', { x, y, width: rect.width, height: rect.height });
-                // Still try to raycast, but log the issue
-            }
-            
-            // Convert to normalized device coordinates (-1 to +1)
-            // Note: WebGL uses bottom-left origin, so we flip Y
+            // Calculate normalized device coordinates (-1 to +1) directly
+            // Following the exact formula from the documentation:
+            // x = ((clientX - rect.left) / rect.width) * 2 - 1
+            // y = -((clientY - rect.top) / rect.height) * 2 + 1
             const mouse = new THREE.Vector2();
-            mouse.x = (x / rect.width) * 2 - 1;
-            mouse.y = -((y / rect.height) * 2 - 1); // Flip Y coordinate
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            
+            // Validate coordinates are within reasonable bounds (allow slight overflow for edge cases)
+            const relativeX = clientX - rect.left;
+            const relativeY = clientY - rect.top;
+            if (relativeX < -10 || relativeX > rect.width + 10 || relativeY < -10 || relativeY > rect.height + 10) {
+                console.warn('Click significantly outside bounds:', { 
+                    relativeX, 
+                    relativeY, 
+                    width: rect.width, 
+                    height: rect.height,
+                    normalized: { x: mouse.x, y: mouse.y }
+                });
+            }
             
             // Validate normalized coordinates
             if (isNaN(mouse.x) || isNaN(mouse.y) || !isFinite(mouse.x) || !isFinite(mouse.y)) {
-                console.error('Invalid normalized coordinates:', { mouse, x, y, rect });
+                console.error('Invalid normalized coordinates:', { 
+                    mouse, 
+                    relativeX: clientX - rect.left, 
+                    relativeY: clientY - rect.top, 
+                    rect 
+                });
                 return null;
             }
             
@@ -633,11 +624,10 @@
             console.log('Raycast from tap:', {
                 tapCoords: { clientX, clientY },
                 rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                relativeCoords: { x, y },
+                relativeCoords: { x: clientX - rect.left, y: clientY - rect.top },
                 normalizedCoords: { x: mouse.x, y: mouse.y },
-                canvasFound: !!canvas,
-                usingCanvas: usingCanvas,
-                viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight }
+                viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight },
+                formula: 'x = ((clientX - rect.left) / rect.width) * 2 - 1, y = -((clientY - rect.top) / rect.height) * 2 + 1'
             });
             
             // Get only interactive meshes (exclude ground, table, etc.)
