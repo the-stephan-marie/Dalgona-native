@@ -524,7 +524,18 @@
             }
             
             // Get normalized device coordinates
-            const rect = viewer.getBoundingClientRect();
+            // In AR mode, use the canvas element directly if available
+            let rect;
+            if (isInARMode && viewer.renderRoot) {
+                const canvas = viewer.renderRoot.querySelector('canvas');
+                if (canvas) {
+                    rect = canvas.getBoundingClientRect();
+                } else {
+                    rect = viewer.getBoundingClientRect();
+                }
+            } else {
+                rect = viewer.getBoundingClientRect();
+            }
             
             // Account for any page scroll offset
             const x = clientX - rect.left;
@@ -534,6 +545,11 @@
             const mouse = new THREE.Vector2();
             mouse.x = (x / rect.width) * 2 - 1;
             mouse.y = -(y / rect.height) * 2 + 1;
+            
+            // Debug logging (remove after testing)
+            if (isInARMode) {
+                console.log('AR click coords:', { clientX, clientY, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, normalized: { x: mouse.x, y: mouse.y } });
+            }
             
             // Get only interactive meshes (exclude ground, table, etc.)
             const interactiveMeshes = hierarchyNodes
@@ -556,11 +572,11 @@
                 const canvas = viewer.renderRoot.querySelector('canvas');
                 if (canvas && canvas.__THREE__) {
                     const renderer = canvas.__THREE__;
-                    // In AR mode, the camera might be in a different location
+                    // In AR mode, try multiple camera sources
                     if (isInARMode) {
-                        // Try to find the active camera in AR mode
-                        threeCamera = renderer.camera || renderer.xrCamera || 
-                                     renderer.scene?.children.find(child => child.isCamera && child.matrixWorldNeedsUpdate !== false);
+                        threeCamera = renderer.xrCamera || renderer.camera || 
+                                     renderer.scene?.children.find(child => child.isCamera && child.matrixWorldNeedsUpdate !== false) ||
+                                     renderer.scene?.children.find(child => child.isCamera);
                     } else {
                         threeCamera = renderer.camera || renderer.scene?.children.find(child => child.isCamera);
                     }
@@ -577,22 +593,10 @@
                 camera.far = threeCamera.far || camera.far;
                 camera.updateProjectionMatrix();
                 camera.updateMatrixWorld();
-                
-                if (isInARMode) {
-                    console.log('AR camera synced:', {
-                        position: camera.position,
-                        fov: camera.fov,
-                        aspect: camera.aspect
-                    });
-                }
             } else {
                 // Fallback: update aspect ratio
                 camera.aspect = viewer.clientWidth / viewer.clientHeight;
                 camera.updateProjectionMatrix();
-                
-                if (isInARMode) {
-                    console.warn('Could not sync AR camera, using fallback');
-                }
             }
             
             // Update raycaster
@@ -791,7 +795,7 @@
                 if (mode === 'webxr') {
                     console.log('✅ WebXR AR session started successfully!');
                 }
-                // Re-initialize hit detection for AR mode
+                // Re-initialize hit detection for AR mode after a short delay
                 setTimeout(() => {
                     console.log('Re-initializing hit detection for AR mode...');
                     setupHitDetection();
@@ -931,11 +935,6 @@
                 clientY = event.clientY;
             }
             
-            // Log for AR debugging
-            if (isInARMode) {
-                console.log('AR tap detected:', { clientX, clientY, isInARMode });
-            }
-            
             // Use raycasting to find hit node
             let nodeName = null;
             if (raycaster && hierarchyNodes.length > 0) {
@@ -946,7 +945,7 @@
             if (nodeName) {
                 console.log('Hit node:', nodeName);
             } else if (isInARMode) {
-                console.log('No hit detected in AR mode');
+                console.log('No hit detected in AR mode at:', { clientX, clientY });
             }
             
             if (!nodeName) {
@@ -990,14 +989,13 @@
         
         // Also listen for touch events directly on the viewer (important for AR)
         viewer.addEventListener('touchstart', (event) => {
-            event.preventDefault(); // Prevent default to ensure our handler runs
+            // Don't prevent default - let model-viewer handle it first, then process
             handleTapOrClick(event);
-        }, { passive: false });
+        });
         
         viewer.addEventListener('touchend', (event) => {
-            event.preventDefault();
             handleTapOrClick(event);
-        }, { passive: false });
+        });
         
         // For AR mode, also listen on the canvas element if available
         let arCanvasListenersAdded = false;
@@ -1009,13 +1007,11 @@
                     if (canvas) {
                         console.log('Adding touch listeners to AR canvas');
                         canvas.addEventListener('touchstart', (event) => {
-                            event.preventDefault();
                             handleTapOrClick(event);
-                        }, { passive: false });
+                        });
                         canvas.addEventListener('touchend', (event) => {
-                            event.preventDefault();
                             handleTapOrClick(event);
-                        }, { passive: false });
+                        });
                         canvas.addEventListener('click', handleTapOrClick);
                         arCanvasListenersAdded = true;
                     } else if (attempt < 5) {
