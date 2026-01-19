@@ -85,8 +85,8 @@
             background: #0056CC;
         }
 
-        /* AR Animation Play Button - Bottom Overlay */
-        #ar-play-button {
+        /* AR Recipe Link - Bottom Overlay */
+        #ar-recipe-link {
             position: fixed;
             bottom: 20px;
             left: 50%;
@@ -106,21 +106,23 @@
             pointer-events: auto; /* Enable clicks */
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
+            text-decoration: none;
+            text-align: center;
         }
 
-        #ar-play-button:hover {
+        #ar-recipe-link:hover {
             background: #0056CC;
             transform: translateX(-50%) scale(1.05);
             box-shadow: 0 6px 25px rgba(0, 122, 255, 0.5);
         }
 
-        #ar-play-button:active {
+        #ar-recipe-link:active {
             transform: translateX(-50%) scale(0.95);
         }
 
-        /* Show button when AR is active */
-        model-viewer[ar-status="presenting"] ~ #ar-play-button,
-        #ar-play-button.ar-active {
+        /* Show link when AR is active */
+        model-viewer[ar-status="presenting"] ~ #ar-recipe-link,
+        #ar-recipe-link.ar-active {
             display: block;
         }
     </style>
@@ -152,10 +154,10 @@
         </div>
     </div>
 
-    <!-- AR Animation Play Button - Overlays camera feed in AR mode -->
-    <button id="ar-play-button">
-        ▶ Play Animation
-    </button>
+    <!-- AR Recipe Link - Overlays camera feed in AR mode -->
+    <a id="ar-recipe-link" href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" target="_blank" rel="noopener noreferrer">
+        📖 View Recipe
+    </a>
 
     <script type="module">
         // ============================================
@@ -835,7 +837,7 @@
         
         // Handle AR button visibility and errors
         const arButton = document.querySelector('#ar-button');
-        const arPlayButton = document.querySelector('#ar-play-button');
+        const arRecipeLink = document.querySelector('#ar-recipe-link');
         
         // Track current AR mode
         let currentARMode = null;
@@ -891,10 +893,10 @@
                 // Stop auto-play when exiting AR mode
                 stopAutoPlay();
                 
-                // Hide AR play button when exiting AR mode
-                if (arPlayButton) {
-                    arPlayButton.classList.remove('ar-active');
-                    arPlayButton.style.display = 'none';
+                // Hide AR recipe link when exiting AR mode
+                if (arRecipeLink) {
+                    arRecipeLink.classList.remove('ar-active');
+                    arRecipeLink.style.display = 'none';
                 }
                 
                 // Make sure button is visible if AR is available
@@ -906,11 +908,11 @@
                 console.log('AR is active!');
                 console.log('AR mode:', mode);
                 
-                // Show AR play button when AR mode is active
-                if (arPlayButton) {
-                    arPlayButton.classList.add('ar-active');
-                    arPlayButton.style.display = 'block';
-                    console.log('✅ AR play button shown');
+                // Show AR recipe link when AR mode is active
+                if (arRecipeLink) {
+                    arRecipeLink.classList.add('ar-active');
+                    arRecipeLink.style.display = 'block';
+                    console.log('✅ AR recipe link shown');
                 }
                 
                 if (mode === 'quick-look') {
@@ -1291,43 +1293,15 @@
         });
 
         // ============================================
-        // AR PLAY BUTTON HANDLER
+        // AR RECIPE LINK HANDLER
         // ============================================
         
-        // Handle AR play button click
-        if (arPlayButton) {
-            arPlayButton.addEventListener('click', (event) => {
+        // Handle AR recipe link click (opens in new tab)
+        if (arRecipeLink) {
+            arRecipeLink.addEventListener('click', (event) => {
                 event.stopPropagation(); // Prevent event from bubbling to viewer
-                console.log('🎬 AR Play button clicked');
-                
-                // Check if animation is already playing
-                if (isAnimating || isAutoPlaying) {
-                    console.log('Animation already playing, restarting...');
-                    stopAutoPlay();
-                    // Reset and restart
-                    currentStepIndex = -1;
-                    viewer.currentTime = frameToTime(1);
-                    viewer.pause();
-                    isAnimating = false;
-                }
-                
-                // Start playing all steps automatically
-                playAllStepsAuto();
-                
-                // Update button text to show it's playing
-                arPlayButton.textContent = '⏸ Playing...';
-                arPlayButton.disabled = true;
-                
-                // Re-enable button when animation completes
-                setTimeout(() => {
-                    const checkCompletion = setInterval(() => {
-                        if (!isAutoPlaying && !isAnimating) {
-                            arPlayButton.textContent = '▶ Play Animation';
-                            arPlayButton.disabled = false;
-                            clearInterval(checkCompletion);
-                        }
-                    }, 500);
-                }, 1000);
+                console.log('🔗 AR Recipe link clicked - opening Nescafé Dalgona recipe');
+                // Link will open in new tab automatically via target="_blank"
             });
         }
 
@@ -1388,11 +1362,7 @@
                     titleText.innerText = lastStep.title;
                     descText.innerText = 'Animation complete!';
                     
-                    // Reset AR play button
-                    if (arPlayButton) {
-                        arPlayButton.textContent = '▶ Play Animation';
-                        arPlayButton.disabled = false;
-                    }
+                    // Recipe link doesn't need reset (it's just a link)
                     return;
                 }
 
@@ -1453,11 +1423,7 @@
             isAnimating = false;
             console.log('⏹️ Auto-play stopped');
             
-            // Reset AR play button
-            if (arPlayButton) {
-                arPlayButton.textContent = '▶ Play Animation';
-                arPlayButton.disabled = false;
-            }
+                    // Recipe link doesn't need reset (it's just a link)
         }
 
         // ============================================
