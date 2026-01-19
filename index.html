@@ -414,34 +414,14 @@
             viewer.currentTime = frameToTime(1);
             viewer.pause();
             
-            // Wait a bit for canvas to be properly sized
-            setTimeout(() => {
-                // Access hierarchy and build mappings
-                setupHitDetection();
-            }, 100);
+            // Access hierarchy and build mappings
+            setupHitDetection();
         });
         
         // Also listen for scene-graph-ready event
         viewer.addEventListener('scene-graph-ready', () => {
             console.log('Scene graph ready');
-            // Wait a bit for canvas to be properly sized
-            setTimeout(() => {
-                setupHitDetection();
-            }, 100);
-        });
-        
-        // Also check when the viewer is resized (canvas might be sized then)
-        let resizeTimeout;
-        window.addEventListener('resize', () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => {
-                console.log('Window resized, checking canvas size');
-                const canvas = viewer.renderRoot?.querySelector('canvas');
-                if (canvas) {
-                    const rect = canvas.getBoundingClientRect();
-                    console.log('Canvas size after resize:', { width: rect.width, height: rect.height });
-                }
-            }, 250);
+            setupHitDetection();
         });
         
         function setupHitDetection() {
@@ -570,74 +550,24 @@
         
         // Function to find which node was hit using raycasting
         function findHitNode(clientX, clientY) {
-            if (!raycaster) {
-                console.error('Raycaster not initialized');
-                return null;
-            }
-            if (!camera) {
-                console.error('Camera not initialized');
-                return null;
-            }
-            if (!hierarchyNodes || hierarchyNodes.length === 0) {
-                console.error('No hierarchy nodes available');
+            if (!raycaster || !camera || !hierarchyNodes.length) {
                 return null;
             }
             
-            // IMPORTANT: Use viewer.getBoundingClientRect() directly as per documentation
-            // This ensures coordinates match the visible rendering area
-            // The canvas might be in shadow DOM with different positioning, so use viewer instead
+            // Get normalized device coordinates
             const rect = viewer.getBoundingClientRect();
             
-            // Validate rect has valid dimensions
-            if (!rect || rect.width === 0 || rect.height === 0) {
-                console.error('Invalid rect dimensions - cannot raycast:', {
-                    rect,
-                    viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight }
-                });
-                return null;
-            }
+            // Account for any page scroll offset
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
             
-            // Calculate normalized device coordinates (-1 to +1) directly
-            // Following the exact formula from the documentation:
-            // x = ((clientX - rect.left) / rect.width) * 2 - 1
-            // y = -((clientY - rect.top) / rect.height) * 2 + 1
+            // Convert to normalized device coordinates (-1 to +1)
             const mouse = new THREE.Vector2();
-            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            mouse.x = (x / rect.width) * 2 - 1;
+            mouse.y = -(y / rect.height) * 2 + 1;
             
-            // Validate coordinates are within reasonable bounds (allow slight overflow for edge cases)
-            const relativeX = clientX - rect.left;
-            const relativeY = clientY - rect.top;
-            if (relativeX < -10 || relativeX > rect.width + 10 || relativeY < -10 || relativeY > rect.height + 10) {
-                console.warn('Click significantly outside bounds:', { 
-                    relativeX, 
-                    relativeY, 
-                    width: rect.width, 
-                    height: rect.height,
-                    normalized: { x: mouse.x, y: mouse.y }
-                });
-            }
-            
-            // Validate normalized coordinates
-            if (isNaN(mouse.x) || isNaN(mouse.y) || !isFinite(mouse.x) || !isFinite(mouse.y)) {
-                console.error('Invalid normalized coordinates:', { 
-                    mouse, 
-                    relativeX: clientX - rect.left, 
-                    relativeY: clientY - rect.top, 
-                    rect 
-                });
-                return null;
-            }
-            
-            // Debug logging
-            console.log('Raycast from tap:', {
-                tapCoords: { clientX, clientY },
-                rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                relativeCoords: { x: clientX - rect.left, y: clientY - rect.top },
-                normalizedCoords: { x: mouse.x, y: mouse.y },
-                viewerSize: { width: viewer.clientWidth, height: viewer.clientHeight },
-                formula: 'x = ((clientX - rect.left) / rect.width) * 2 - 1, y = -((clientY - rect.top) / rect.height) * 2 + 1'
-            });
+            // Debug logging (remove after testing)
+            console.log('Click coords:', { clientX, clientY, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, normalized: { x: mouse.x, y: mouse.y } });
             
             // Get only interactive meshes (exclude ground, table, etc.)
             const interactiveMeshes = hierarchyNodes
@@ -651,204 +581,39 @@
                 });
             
             if (interactiveMeshes.length === 0) {
-                console.warn('No interactive meshes found');
                 return null;
             }
             
             // Try to sync camera with model-viewer's camera
             let threeCamera = null;
             if (viewer.renderRoot) {
-                const canvas = viewer.renderRoot.querySelector('canvas');
-                if (canvas && canvas.__THREE__) {
-                    const renderer = canvas.__THREE__;
+                const renderer = viewer.renderRoot.querySelector('canvas')?.__THREE__;
+                if (renderer) {
                     threeCamera = renderer.camera || renderer.scene?.children.find(child => child.isCamera);
                 }
             }
             
             // Update camera to match model-viewer's camera
-            try {
-                if (threeCamera) {
-                    // Copy camera properties
-                    if (threeCamera.position) camera.position.copy(threeCamera.position);
-                    if (threeCamera.quaternion) camera.quaternion.copy(threeCamera.quaternion);
-                    camera.fov = threeCamera.fov || camera.fov;
-                    camera.aspect = threeCamera.aspect || (rect.width / rect.height);
-                    camera.near = threeCamera.near || camera.near;
-                    camera.far = threeCamera.far || camera.far;
-                    
-                    // Update matrices - CRITICAL for accurate raycasting
-                    camera.updateProjectionMatrix();
-                    camera.updateMatrixWorld(true); // Force update
-                    
-                    // Also update world matrix if available
-                    if (threeCamera.matrixWorld) {
-                        camera.matrixWorld.copy(threeCamera.matrixWorld);
-                    }
-                } else {
-                    // Fallback: Calculate camera position from model-viewer's camera-orbit
-                    // model-viewer uses spherical coordinates: "theta phi radius"
-                    // Try to get camera-orbit from the attribute or property
-                    const cameraOrbitAttr = viewer.getAttribute('camera-orbit');
-                    const cameraOrbitProp = viewer.cameraOrbit || viewer.__cameraOrbit;
-                    const cameraOrbit = cameraOrbitAttr || cameraOrbitProp || '0deg 75deg 105%';
-                    
-                    console.log('Camera orbit values:', {
-                        attr: cameraOrbitAttr,
-                        prop: cameraOrbitProp,
-                        using: cameraOrbit
-                    });
-                    
-                    // Parse camera orbit (format: "theta phi radius")
-                    // Can be "0deg 75deg 105%" or "0deg 75deg 1.05m" or similar
-                    const orbitMatch = cameraOrbit.match(/([\d.-]+)deg\s+([\d.-]+)deg\s+([\d.]+)(%|m|)/);
-                    if (orbitMatch) {
-                        const theta = parseFloat(orbitMatch[1]) * Math.PI / 180; // azimuth
-                        const phi = parseFloat(orbitMatch[2]) * Math.PI / 180;   // polar angle
-                        const radiusValue = parseFloat(orbitMatch[3]);
-                        const radiusUnit = orbitMatch[4];
-                        
-                        let radius;
-                        if (radiusUnit === '%') {
-                            // Percentage - estimate model size
-                            const estimatedModelSize = 5; // Adjust based on your model
-                            radius = estimatedModelSize * (radiusValue / 100);
-                        } else {
-                            // Absolute value (meters or unitless)
-                            radius = radiusValue;
-                        }
-                        
-                        // Convert spherical to cartesian coordinates
-                        // Note: model-viewer uses different coordinate system
-                        // phi is measured from +Y axis (0 = top, 90 = horizontal)
-                        const x = radius * Math.sin(phi) * Math.sin(theta);
-                        const y = radius * Math.cos(phi);
-                        const z = radius * Math.sin(phi) * Math.cos(theta);
-                        
-                        camera.position.set(x, y, z);
-                        camera.lookAt(0, 0, 0); // Look at origin (model center)
-                        
-                        console.log('Calculated camera position from orbit:', {
-                            orbit: cameraOrbit,
-                            parsed: { theta: theta * 180 / Math.PI, phi: phi * 180 / Math.PI, radius },
-                            position: { x, y, z }
-                        });
-                    } else {
-                        // Ultimate fallback: position camera looking at origin from reasonable distance
-                        // Default model-viewer camera is typically at ~5 units away
-                        camera.position.set(0, 3, 5);
-                        camera.lookAt(0, 0, 0);
-                        console.warn('Could not parse camera orbit, using default position:', {
-                            orbit: cameraOrbit,
-                            defaultPos: { x: 0, y: 3, z: 5 }
-                        });
-                    }
-                    
-                    // Update aspect ratio and matrices
-                    camera.aspect = rect.width / rect.height;
-                    // Get FOV from model-viewer (field-of-view attribute or property)
-                    const fieldOfView = viewer.fieldOfView || viewer.__fieldOfView || viewer.getAttribute('field-of-view');
-                    let fovValue = 45; // Default FOV
-                    if (fieldOfView) {
-                        const parsed = parseFloat(fieldOfView);
-                        // Validate: must be a number, finite, and between reasonable bounds (10-120 degrees)
-                        if (!isNaN(parsed) && isFinite(parsed) && parsed > 10 && parsed < 120) {
-                            fovValue = parsed;
-                        } else {
-                            console.warn('Invalid FOV value from model-viewer, using default:', fieldOfView);
-                        }
-                    }
-                    camera.fov = fovValue;
-                    camera.updateProjectionMatrix();
-                    camera.updateMatrixWorld(true);
-                }
-            } catch (cameraError) {
-                console.warn('Error syncing camera, using fallback:', cameraError);
-                // Ultimate fallback: position camera looking at origin
-                camera.position.set(0, 0, 5);
-                camera.lookAt(0, 0, 0);
-                camera.aspect = rect.width / rect.height;
-                // Get FOV from model-viewer (field-of-view attribute or property)
-                const fieldOfView = viewer.fieldOfView || viewer.__fieldOfView || viewer.getAttribute('field-of-view');
-                let fovValue = 45; // Default FOV
-                if (fieldOfView) {
-                    const parsed = parseFloat(fieldOfView);
-                    // Validate: must be a number, finite, and between reasonable bounds (10-120 degrees)
-                    if (!isNaN(parsed) && isFinite(parsed) && parsed > 10 && parsed < 120) {
-                        fovValue = parsed;
-                    } else {
-                        console.warn('Invalid FOV value from model-viewer, using default:', fieldOfView);
-                    }
-                }
-                camera.fov = fovValue;
+            if (threeCamera) {
+                camera.position.copy(threeCamera.position);
+                camera.quaternion.copy(threeCamera.quaternion);
+                camera.fov = threeCamera.fov;
+                camera.aspect = threeCamera.aspect;
+                camera.near = threeCamera.near;
+                camera.far = threeCamera.far;
                 camera.updateProjectionMatrix();
-                camera.updateMatrixWorld(true);
+                camera.updateMatrixWorld();
+            } else {
+                // Fallback: update aspect ratio
+                camera.aspect = viewer.clientWidth / viewer.clientHeight;
+                camera.updateProjectionMatrix();
             }
             
-            // Log camera state before raycasting
-            console.log('Camera state before raycast:', {
-                position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
-                fov: camera.fov,
-                aspect: camera.aspect,
-                matrixWorldNeedsUpdate: camera.matrixWorldNeedsUpdate
-            });
-            
-            // Validate camera is ready for raycasting
-            if (isNaN(camera.fov) || !isFinite(camera.fov) || camera.fov <= 0) {
-                console.error('Invalid camera FOV, cannot raycast:', camera.fov);
-                return null;
-            }
-            
-            if (isNaN(camera.aspect) || !isFinite(camera.aspect) || camera.aspect <= 0) {
-                console.error('Invalid camera aspect, cannot raycast:', camera.aspect);
-                return null;
-            }
-            
-            // Update raycaster with the tap coordinates
-            try {
-                raycaster.setFromCamera(mouse, camera);
-                
-                // Log ray details after setting
-                console.log('Ray details after setFromCamera:', {
-                    origin: { x: raycaster.ray.origin.x, y: raycaster.ray.origin.y, z: raycaster.ray.origin.z },
-                    direction: { x: raycaster.ray.direction.x, y: raycaster.ray.direction.y, z: raycaster.ray.direction.z },
-                    normalizedMouse: { x: mouse.x, y: mouse.y }
-                });
-            } catch (raycastError) {
-                console.error('Error setting raycaster from camera:', raycastError);
-                console.error('Raycast error details:', {
-                    mouse: { x: mouse.x, y: mouse.y },
-                    camera: {
-                        position: camera.position,
-                        fov: camera.fov,
-                        aspect: camera.aspect
-                    }
-                });
-                return null;
-            }
+            // Update raycaster
+            raycaster.setFromCamera(mouse, camera);
             
             // Perform raycasting ONLY on interactive meshes
-            let intersects;
-            try {
-                intersects = raycaster.intersectObjects(interactiveMeshes, true);
-            } catch (intersectError) {
-                console.error('Error during raycast intersection:', intersectError);
-                console.error('Intersect error details:', {
-                    interactiveMeshesCount: interactiveMeshes.length,
-                    raycaster: {
-                        ray: raycaster.ray,
-                        near: raycaster.near,
-                        far: raycaster.far
-                    }
-                });
-                return null;
-            }
-            
-            console.log('Raycast results:', {
-                rayOrigin: raycaster.ray.origin,
-                rayDirection: raycaster.ray.direction,
-                intersections: intersects.length,
-                hitObjects: intersects.map(i => i.object.name)
-            });
+            const intersects = raycaster.intersectObjects(interactiveMeshes, true);
             
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object;
@@ -866,13 +631,8 @@
                 });
                 
                 if (hitNode) {
-                    console.log('✅ Hit detected:', hitNode.name);
                     return hitNode.name;
-                } else {
-                    console.warn('Hit mesh found but no matching node:', hitMesh.name);
                 }
-            } else {
-                console.log('❌ No intersections found');
             }
             
             return null;
@@ -1018,11 +778,8 @@
                 if (!viewer.loaded) {
                     console.error('❌ Model not loaded - AR cannot initialize');
                 }
-                // Only warn if explicitly false, not if undefined (might still be checking)
-                if (viewer.arSupported === false) {
+                if (!viewer.arSupported) {
                     console.error('❌ AR not supported on this device/browser');
-                } else if (viewer.arSupported === undefined) {
-                    console.log('ℹ️ AR support status still being determined...');
                 }
                 if (viewer.arModes && viewer.arModes.length === 0) {
                     console.error('❌ No AR modes available');
@@ -1089,32 +846,17 @@
         // Check AR availability after model loads
         viewer.addEventListener('load', async () => {
             console.log('Model loaded, checking AR availability...');
-            console.log('AR modes configured:', viewer.arModes);
+            console.log('AR available:', viewer.arAvailable);
+            console.log('AR supported:', viewer.arSupported);
+            console.log('AR modes:', viewer.arModes);
             console.log('Model loaded:', viewer.loaded);
             console.log('Model source:', viewer.src);
             console.log('iOS source:', viewer.iosSrc);
             
             const isMobile = isMobileDevice();
             
-            // Function to check AR availability more reliably
-            const checkARAvailability = async () => {
-                // Check properties (they might be undefined initially)
-                const arAvailable = viewer.arAvailable;
-                const arSupported = viewer.arSupported;
-                
-                console.log('AR availability check:', {
-                    arAvailable: arAvailable,
-                    arSupported: arSupported,
-                    arModes: viewer.arModes,
-                    isMobile: isMobile,
-                    userAgent: navigator.userAgent
-                });
-                
-                // On iOS, Quick Look might be available even if arAvailable is undefined
-                // Check if AR button is actually functional by checking if it's in the DOM
-                const arButtonSlot = viewer.querySelector('[slot="ar-button"]');
-                const hasARButton = !!arButtonSlot;
-                
+            // Wait a bit longer for AR to initialize, especially WebXR on desktop
+            setTimeout(async () => {
                 // Check WebXR support for desktop
                 let webXRSupported = false;
                 if (!isMobile) {
@@ -1138,65 +880,39 @@
                     }
                 }
                 
-                // Only hide button if AR is definitely not available AND WebXR is not supported (on desktop)
-                if (arAvailable === false && !isMobile && !webXRSupported) {
-                    console.log('Hiding AR button - AR explicitly not available');
+                // Only hide button if AR is not available AND WebXR is not supported (on desktop)
+                if (!viewer.arAvailable && !isMobile && !webXRSupported) {
+                    console.log('Hiding AR button - no AR support detected');
                     arButton.style.display = 'none';
-                } else {
-                    // Keep button visible - either AR is available, or we're on mobile (where Quick Look might work)
-                    console.log('Keeping AR button visible');
+                } else if (!viewer.arAvailable && !isMobile && webXRSupported) {
+                    console.log('Keeping AR button visible - WebXR detected');
                     arButton.style.display = '';
                 }
                 
-                // Log AR capabilities (only warn if explicitly false, not if undefined)
+                // Log AR capabilities
                 if (isMobile) {
                     console.log('Mobile device detected');
-                    console.log('AR available:', arAvailable !== undefined ? arAvailable : 'checking...');
-                    console.log('AR supported:', arSupported !== undefined ? arSupported : 'checking...');
+                    console.log('AR available:', viewer.arAvailable);
+                    console.log('AR supported:', viewer.arSupported);
                     
-                    // On iOS, Quick Look might work even if arAvailable is undefined
-                    if (arAvailable === false) {
-                        console.warn('⚠️ AR explicitly not available on this mobile device');
+                    if (!viewer.arAvailable) {
+                        console.warn('AR not available on this mobile device');
                         console.log('Possible reasons:');
                         console.log('1. Browser does not support AR');
                         console.log('2. Model file too large');
                         console.log('3. Missing USDZ file (for iOS)');
                         console.log('4. Camera permissions not granted');
                         console.log('5. Device does not support AR');
-                    } else if (arAvailable === undefined) {
-                        console.log('ℹ️ AR availability still being determined...');
-                        console.log('On iOS, Quick Look may still work even if this is undefined.');
-                        console.log('Try clicking the AR button to test.');
-                    } else {
-                        console.log('✅ AR appears to be available!');
                     }
                 } else {
                     console.log('Desktop device detected');
-                    console.log('AR available (model-viewer):', arAvailable !== undefined ? arAvailable : 'checking...');
+                    console.log('AR available (model-viewer):', viewer.arAvailable);
                     console.log('WebXR available:', webXRSupported);
-                    if (arAvailable === true || webXRSupported) {
+                    if (viewer.arAvailable || webXRSupported) {
                         console.log('✅ AR should work on this desktop browser');
                     }
                 }
-            };
-            
-            // Check immediately
-            await checkARAvailability();
-            
-            // Also check after a delay (AR capabilities might be determined asynchronously)
-            setTimeout(async () => {
-                console.log('Re-checking AR availability after delay...');
-                await checkARAvailability();
-            }, 2000);
-            
-            // Also check when AR status changes
-            viewer.addEventListener('ar-status', async (event) => {
-                if (event.detail.status === 'not-presenting') {
-                    // AR is available but not active - this confirms AR works
-                    console.log('✅ AR confirmed available (status: not-presenting)');
-                    arButton.style.display = '';
-                }
-            }, { once: true });
+            }, 2000); // Increased timeout to allow WebXR to initialize
         });
 
         // ============================================
@@ -1286,13 +1002,7 @@
                 nodeName = findHitNode(clientX, clientY);
             } catch (error) {
                 console.error('Error in findHitNode:', error);
-                console.error('Error details:', {
-                    message: error?.message,
-                    stack: error?.stack,
-                    name: error?.name,
-                    error: String(error)
-                });
-                return null;
+                return;
             }
             
             // Log the node name for debugging (preserve the name)
