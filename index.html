@@ -143,30 +143,41 @@
             display: none;
         }
 
-        /* When WebXR AR session starts (session-started or presenting), show the card */
+        /* When WebXR AR session starts (session-started, object-placed, or presenting), show the card */
         /* Note: slot="ar-overlay" elements are moved to a special overlay container by model-viewer */
         model-viewer[ar-status="session-started"] #ar-recipe-card,
+        model-viewer[ar-status="object-placed"] #ar-recipe-card,
         model-viewer[ar-status="presenting"] #ar-recipe-card {
             display: flex !important;
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            max-width: 500px;
-            background: white;
-            padding: 16px 20px;
-            padding-bottom: calc(16px + env(safe-area-inset-bottom));
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-            z-index: 99999;
-            pointer-events: auto;
+            position: fixed !important;
+            bottom: 20px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            width: 90% !important;
+            max-width: 500px !important;
+            background: white !important;
+            padding: 16px 20px !important;
+            padding-bottom: calc(16px + env(safe-area-inset-bottom)) !important;
+            border-radius: 10px !important;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+            z-index: 99999 !important;
+            pointer-events: auto !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
         
         /* Also target the element directly when AR is active */
         model-viewer[ar-status="session-started"] slot[name="ar-overlay"] #ar-recipe-card,
+        model-viewer[ar-status="object-placed"] slot[name="ar-overlay"] #ar-recipe-card,
         model-viewer[ar-status="presenting"] slot[name="ar-overlay"] #ar-recipe-card {
             display: flex !important;
+        }
+        
+        /* Ensure the overlay slot container itself is visible */
+        model-viewer[ar-status="session-started"] slot[name="ar-overlay"],
+        model-viewer[ar-status="object-placed"] slot[name="ar-overlay"],
+        model-viewer[ar-status="presenting"] slot[name="ar-overlay"] {
+            display: contents !important;
         }
 
         .ar-recipe-content {
@@ -1057,18 +1068,58 @@
                 // Show AR recipe card for WebXR mode
                 if (arRecipeCard) {
                     // Force visibility for WebXR DOM overlay
-                    arRecipeCard.style.display = 'flex';
-                    arRecipeCard.style.position = 'fixed';
-                    arRecipeCard.style.bottom = '20px';
-                    arRecipeCard.style.left = '50%';
-                    arRecipeCard.style.transform = 'translateX(-50%)';
-                    arRecipeCard.style.zIndex = '99999';
-                    arRecipeCard.style.width = '90%';
-                    arRecipeCard.style.maxWidth = '500px';
+                    // Use setTimeout to ensure overlay container is ready
+                    setTimeout(() => {
+                        arRecipeCard.style.display = 'flex';
+                        arRecipeCard.style.position = 'fixed';
+                        arRecipeCard.style.bottom = '20px';
+                        arRecipeCard.style.left = '50%';
+                        arRecipeCard.style.transform = 'translateX(-50%)';
+                        arRecipeCard.style.zIndex = '99999';
+                        arRecipeCard.style.width = '90%';
+                        arRecipeCard.style.maxWidth = '500px';
+                        arRecipeCard.style.visibility = 'visible';
+                        arRecipeCard.style.opacity = '1';
+                        arRecipeCard.style.background = 'white';
+                        arRecipeCard.style.padding = '16px 20px';
+                        arRecipeCard.style.borderRadius = '10px';
+                        arRecipeCard.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.2)';
+                        console.log('✅ AR recipe card styles applied');
+                        console.log('Card dimensions:', {
+                            clientHeight: arRecipeCard.clientHeight,
+                            clientWidth: arRecipeCard.clientWidth,
+                            offsetHeight: arRecipeCard.offsetHeight,
+                            offsetWidth: arRecipeCard.offsetWidth
+                        });
+                    }, 100);
                     console.log('✅ AR recipe card visibility enabled for WebXR session');
                     console.log('✅ WebXR mode supports HTML overlays (slot="ar-overlay")');
                 } else {
                     console.error('❌ AR recipe card element not found!');
+                }
+            } else if (status === 'object-placed') {
+                console.log('✅ Object placed in AR!');
+                console.log('AR mode:', mode || 'webxr (inferred)');
+                
+                // Ensure AR recipe card remains visible after object placement
+                if (arRecipeCard) {
+                    setTimeout(() => {
+                        arRecipeCard.style.display = 'flex';
+                        arRecipeCard.style.position = 'fixed';
+                        arRecipeCard.style.bottom = '20px';
+                        arRecipeCard.style.left = '50%';
+                        arRecipeCard.style.transform = 'translateX(-50%)';
+                        arRecipeCard.style.zIndex = '99999';
+                        arRecipeCard.style.visibility = 'visible';
+                        arRecipeCard.style.opacity = '1';
+                        console.log('✅ AR recipe card visibility maintained after object placement');
+                        console.log('Card dimensions:', {
+                            clientHeight: arRecipeCard.clientHeight,
+                            clientWidth: arRecipeCard.clientWidth,
+                            offsetHeight: arRecipeCard.offsetHeight,
+                            offsetWidth: arRecipeCard.offsetWidth
+                        });
+                    }, 50);
                 }
             } else if (status === 'not-presenting') {
                 console.log('AR available but not active');
