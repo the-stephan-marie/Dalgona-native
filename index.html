@@ -43,6 +43,18 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.15);
             transform: translateY(0);
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            pointer-events: auto; /* Enable clicks on the card */
+            cursor: pointer; /* Show it's clickable */
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+        }
+
+        .card:active {
+            transform: translateY(0);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
 
         .card h2 {
@@ -86,7 +98,8 @@
         }
 
         /* AR Recipe Link - Bottom Overlay */
-        #ar-recipe-link {
+        /* OLD - REPLACED WITH ar-recipe-card */
+        #ar-recipe-link-old {
             position: fixed;
             bottom: 20px;
             left: 50%;
@@ -112,29 +125,91 @@
             visibility: visible !important;
         }
 
-        #ar-recipe-link:hover {
+        #ar-recipe-link-old:hover {
             background: #0056CC;
             transform: translateX(-50%) scale(1.05);
             box-shadow: 0 6px 25px rgba(0, 122, 255, 0.5);
         }
 
-        #ar-recipe-link:active {
+        #ar-recipe-link-old:active {
             transform: translateX(-50%) scale(0.95);
         }
 
         /* Show link when AR is active - CSS-based for immediate visibility */
-        model-viewer[ar-status="presenting"] ~ #ar-recipe-link,
-        #ar-recipe-link.ar-active {
-            display: block !important;
+        /* AR Recipe Card - Bottom Overlay (similar to limear-menu.vercel.app) */
+        #ar-recipe-card {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            background: white;
+            padding: 16px 20px;
+            padding-bottom: calc(16px + env(safe-area-inset-bottom));
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 99999 !important;
+            display: none;
+            pointer-events: auto !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+
+        #ar-recipe-card.ar-active {
+            display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
-            z-index: 99999 !important;
         }
-        
-        /* Also show when model-viewer has AR active class/attribute */
-        model-viewer[ar-status="presenting"] + * #ar-recipe-link,
-        body:has(model-viewer[ar-status="presenting"]) #ar-recipe-link {
-            display: block !important;
+
+        .ar-recipe-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-width: calc(100% - 120px);
+        }
+
+        .ar-recipe-description {
+            font-size: 14px;
+            color: #333;
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        .ar-recipe-url {
+            font-size: 12px;
+            color: #666;
+            margin: 0;
+            text-decoration: none;
+        }
+
+        .ar-recipe-button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            white-space: nowrap;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .ar-recipe-button:hover {
+            background: #0056CC;
+        }
+
+        .ar-recipe-button:active {
+            background: #004499;
+        }
+
+        /* Show card when AR is active */
+        model-viewer[ar-status="presenting"] ~ #ar-recipe-card,
+        body:has(model-viewer[ar-status="presenting"]) #ar-recipe-card {
+            display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
         }
@@ -167,15 +242,24 @@
         </div>
     </div>
 
-    <!-- AR Recipe Link - Overlays camera feed in AR mode -->
-    <!-- Pre-positioned and ready to show instantly when AR activates -->
-    <a id="ar-recipe-link" 
-       href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" 
-       target="_blank" 
-       rel="noopener noreferrer"
-       style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 99999;">
-        📖 View Recipe
-    </a>
+    <!-- AR Recipe Card - Bottom Overlay (similar to limear-menu.vercel.app) -->
+    <div id="ar-recipe-card">
+        <div class="ar-recipe-content">
+            <p class="ar-recipe-description">How to make NESCAFÉ® 3in1 in Dalgona Coffee Recipe</p>
+            <a href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" 
+               class="ar-recipe-url" 
+               target="_blank" 
+               rel="noopener noreferrer">
+                nescafe.com
+            </a>
+        </div>
+        <a href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" 
+           class="ar-recipe-button" 
+           target="_blank" 
+           rel="noopener noreferrer">
+            Visit
+        </a>
+    </div>
 
     <script type="module">
         // ============================================
@@ -423,7 +507,7 @@
             
             // Welcome message
             welcomeTitle: 'Welcome',
-            welcomeDesc: 'Tap the Nescafé sachet to start!',
+            welcomeDesc: 'Tap here to start!',
             
             // Continue prompt
             continuePrompt: 'Tap the correct object to continue ->',
@@ -855,7 +939,7 @@
         
         // Handle AR button visibility and errors
         const arButton = document.querySelector('#ar-button');
-        const arRecipeLink = document.querySelector('#ar-recipe-link');
+        const arRecipeCard = document.querySelector('#ar-recipe-card');
         
         // Track current AR mode
         let currentARMode = null;
@@ -911,11 +995,11 @@
                 // Stop auto-play when exiting AR mode
                 stopAutoPlay();
                 
-                // Hide AR recipe link when exiting AR mode
-                if (arRecipeLink) {
-                    arRecipeLink.classList.remove('ar-active');
-                    arRecipeLink.style.display = 'none';
-                    arRecipeLink.style.visibility = 'hidden';
+                // Hide AR recipe card when exiting AR mode
+                if (arRecipeCard) {
+                    arRecipeCard.classList.remove('ar-active');
+                    arRecipeCard.style.display = 'none';
+                    arRecipeCard.style.visibility = 'hidden';
                 }
                 
                 // Make sure button is visible if AR is available
@@ -927,22 +1011,23 @@
                 console.log('AR is active!');
                 console.log('AR mode:', mode);
                 
-                // Show AR recipe link immediately when AR mode is active - no delays
-                if (arRecipeLink) {
-                    // Ensure link is in the body (not inside model-viewer)
-                    if (arRecipeLink.parentElement !== document.body) {
-                        document.body.appendChild(arRecipeLink);
+                // Show AR recipe card immediately when AR mode is active - no delays
+                if (arRecipeCard) {
+                    // Ensure card is in the body (not inside model-viewer)
+                    if (arRecipeCard.parentElement !== document.body) {
+                        document.body.appendChild(arRecipeCard);
                     }
                     
                     // Show immediately - just toggle visibility
-                    arRecipeLink.classList.add('ar-active');
-                    arRecipeLink.style.display = 'block';
-                    arRecipeLink.style.visibility = 'visible';
-                    arRecipeLink.style.opacity = '1';
+                    arRecipeCard.classList.add('ar-active');
+                    arRecipeCard.style.display = 'flex';
+                    arRecipeCard.style.visibility = 'visible';
+                    arRecipeCard.style.opacity = '1';
+                    arRecipeCard.style.zIndex = '99999';
                     
-                    console.log('✅ AR recipe link shown immediately');
+                    console.log('✅ AR recipe card shown immediately');
                 } else {
-                    console.error('❌ AR recipe link element not found!');
+                    console.error('❌ AR recipe card element not found!');
                 }
                 
                 if (mode === 'quick-look') {
@@ -1323,15 +1408,63 @@
         });
 
         // ============================================
-        // AR RECIPE LINK HANDLER
+        // WELCOME CARD CLICK HANDLER (for in-browser 3D viewer)
         // ============================================
         
-        // Handle AR recipe link click (opens in new tab)
-        if (arRecipeLink) {
-            arRecipeLink.addEventListener('click', (event) => {
+        // Make the welcome card clickable to trigger animations
+        if (card) {
+            card.addEventListener('click', (event) => {
                 event.stopPropagation(); // Prevent event from bubbling to viewer
-                console.log('🔗 AR Recipe link clicked - opening Nescafé Dalgona recipe');
-                // Link will open in new tab automatically via target="_blank"
+                
+                // Only work in non-AR mode (object mode / 3D viewer)
+                if (currentARMode && currentARMode !== 'not-presenting') {
+                    console.log('Card click ignored - AR mode is active');
+                    return;
+                }
+                
+                // Ignore if animating (unless it's a looping step)
+                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) {
+                    console.log('Card click ignored - animation in progress');
+                    return;
+                }
+                
+                console.log('🎬 Welcome card clicked - triggering next animation step');
+                
+                // Check if we're at the start or need to advance
+                if (currentStepIndex < CONFIG.steps.length - 1) {
+                    // Advance to next step
+                    playNextStep();
+                } else {
+                    // All steps completed - restart
+                    console.log('All steps completed - restarting experience');
+                    resetExperience();
+                    // Then play first step
+                    setTimeout(() => {
+                        playNextStep();
+                    }, 100);
+                }
+            });
+            
+            console.log('✅ Welcome card click handler attached');
+        }
+
+        // ============================================
+        // AR RECIPE CARD HANDLER
+        // ============================================
+        
+        // Handle AR recipe card clicks (opens in new tab)
+        if (arRecipeCard) {
+            // Prevent clicks on card from bubbling to viewer
+            arRecipeCard.addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+            
+            // Log when recipe is accessed
+            const recipeLinks = arRecipeCard.querySelectorAll('a');
+            recipeLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    console.log('🔗 AR Recipe clicked - opening Nescafé Dalgona recipe');
+                });
             });
         }
 
