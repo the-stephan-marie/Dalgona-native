@@ -297,9 +297,9 @@
             // Path to your 3D model (GLB format)
             modelPath: 'assets/Dalgona-OneTake_0001.glb',
             
-            // Path to iOS USDZ format (optional, for better iOS support)
-            // Note: USDZ file not present, iOS will use GLB
-            iosModelPath: null,
+            // Path to iOS USDZ format (for better iOS Quick Look support)
+            // USDZ file provides native animation support in Quick Look
+            iosModelPath: 'assets/Dalgona-OneTake_0001.usdz',
             
             // Animation name (single track)
             animationName: 'animation_0',
@@ -383,11 +383,13 @@
 
         // Set model paths from config
         viewer.src = CONFIG.modelPath;
-        // Only set iOS source if it exists (USDZ provides better iOS Quick Look support)
+        // Set iOS source (USDZ provides better iOS Quick Look support with native animations)
         if (CONFIG.iosModelPath) {
             viewer.setAttribute('ios-src', CONFIG.iosModelPath);
+            console.log('✅ USDZ file configured for iOS Quick Look:', CONFIG.iosModelPath);
+            console.log('📱 Quick Look will use USDZ file for better animation support');
         } else {
-            console.log('No USDZ file specified - iOS will use GLB (may have limitations)');
+            console.log('⚠️ No USDZ file specified - iOS will use GLB (may have limitations)');
         }
         viewer.animationName = CONFIG.animationName;
         viewer.autoplay = false;
@@ -840,6 +842,10 @@
             } else if (status === 'not-presenting') {
                 console.log('AR available but not active');
                 isInQuickLook = false;
+                
+                // Stop auto-play when exiting AR mode
+                stopAutoPlay();
+                
                 // Make sure button is visible if AR is available
                 if (mode === 'webxr' && !isMobileDevice()) {
                     console.log('WebXR mode detected - ensuring AR button is visible');
@@ -851,25 +857,60 @@
                 
                 if (mode === 'quick-look') {
                     isInQuickLook = true;
-                    console.warn('⚠️ QUICK LOOK MODE ACTIVE');
-                    console.warn('⚠️ Quick Look does NOT support JavaScript interactions!');
-                    console.warn('⚠️ Tap-to-advance animations will NOT work in Quick Look.');
-                    console.warn('⚠️ Quick Look is a native iOS app - your JavaScript code does not run there.');
-                    console.warn('💡 Tip: Use WebXR mode instead for interactive AR (if available).');
+                    console.log('✅ QUICK LOOK MODE ACTIVE');
+                    console.log('📱 Quick Look supports built-in animations from USDZ files');
+                    console.log('📖 See: https://developer.apple.com/augmented-reality/quick-look/');
+                    console.log('✅ USDZ file detected:', CONFIG.iosModelPath);
+                    console.warn('⚠️ Quick Look does NOT support JavaScript-controlled interactions');
+                    console.warn('⚠️ Tap-to-advance (JavaScript) will NOT work in Quick Look');
+                    console.log('🎬 Attempting to play full animation sequence before Quick Look launch...');
                     
-                    // Show user-friendly message
+                    // Quick Look supports animations that are built into the USDZ file itself
+                    // We can try to set up the animation to play the full sequence before Quick Look launches
+                    // The animation state might carry over when Quick Look opens
+                    try {
+                        // Set to play the full animation range (all steps)
+                        const firstFrame = CONFIG.steps[0].startFrame;
+                        const lastFrame = CONFIG.steps[CONFIG.steps.length - 1].endFrame;
+                        const startTime = frameToTime(firstFrame);
+                        const endTime = frameToTime(lastFrame);
+                        
+                        viewer.autoplay = true;
+                        viewer.loop = false;
+                        viewer.currentTime = startTime;
+                        viewer.play();
+                        
+                        console.log(`✅ Configured animation playback: frames ${firstFrame}-${lastFrame}`);
+                        console.log(`✅ Animation duration: ${(endTime - startTime).toFixed(2)}s`);
+                        console.log('💡 If USDZ has animations configured, they should play automatically in Quick Look');
+                    } catch (e) {
+                        console.warn('Could not configure animation playback:', e);
+                    }
+                    
                     setTimeout(() => {
-                        descText.innerText = 'Quick Look mode: Interactions disabled. Use WebXR for interactive AR.';
-                        titleText.innerText = 'Quick Look Active';
+                        descText.innerText = 'Quick Look: Animation should play automatically from USDZ file';
+                        titleText.innerText = 'AR Experience';
                     }, 500);
                 } else if (mode === 'webxr') {
                     isInQuickLook = false;
                     console.log('✅ WebXR AR session started successfully!');
                     console.log('✅ JavaScript interactions ARE supported in WebXR mode.');
+                    console.log('🎬 Starting automatic animation playback in AR mode...');
+                    
+                    // Start auto-play in AR mode
+                    setTimeout(() => {
+                        playAllStepsAuto();
+                    }, 1000); // Small delay to ensure AR is fully initialized
                 } else if (mode === 'scene-viewer') {
                     isInQuickLook = false;
                     console.log('✅ Scene Viewer AR active (Android)');
                     console.warn('⚠️ Scene Viewer may have limited JavaScript support.');
+                    console.log('🎬 Starting automatic animation playback in AR mode...');
+                    
+                    // Start auto-play in AR mode (may work depending on Android version)
+                    setTimeout(() => {
+                        playAllStepsAuto();
+                    }, 1000); // Small delay to ensure AR is fully initialized
                 }
             }
         });
@@ -1010,6 +1051,12 @@
             if (isInQuickLook) {
                 console.warn('⚠️ Click detected but Quick Look does not support JavaScript interactions');
                 return;
+            }
+            
+            // If auto-play is running in AR mode, stop it and switch to manual control
+            if (isAutoPlaying && currentARMode && currentARMode !== 'not-presenting') {
+                console.log('🛑 User tap detected - stopping auto-play and switching to manual control');
+                stopAutoPlay();
             }
             
             // Ignore if animating (unless it's a looping step)
@@ -1200,6 +1247,95 @@
             viewer.currentTime = frameToTime(1);
             viewer.pause();
             isAnimating = false;
+        }
+
+        // Auto-play all steps in sequence (for AR mode)
+        let autoPlayTimeout = null;
+        let isAutoPlaying = false;
+
+        function playAllStepsAuto() {
+            if (isAutoPlaying) {
+                console.log('Auto-play already in progress');
+                return;
+            }
+
+            console.log('🎬 Starting auto-play sequence in AR mode');
+            isAutoPlaying = true;
+            
+            // Reset to beginning
+            currentStepIndex = -1;
+            viewer.currentTime = frameToTime(1);
+            viewer.pause();
+            isAnimating = false;
+
+            // Start playing steps automatically
+            function playNextAutoStep() {
+                if (currentStepIndex >= CONFIG.steps.length - 1) {
+                    // All steps completed
+                    console.log('✅ Auto-play sequence completed');
+                    isAutoPlaying = false;
+                    const lastStep = CONFIG.steps[CONFIG.steps.length - 1];
+                    titleText.innerText = lastStep.title;
+                    descText.innerText = 'Animation complete!';
+                    return;
+                }
+
+                // Advance to next step
+                currentStepIndex++;
+                const stepData = CONFIG.steps[currentStepIndex];
+                
+                console.log(`🎬 Auto-playing step ${currentStepIndex + 1}/${CONFIG.steps.length}: ${stepData.title}`);
+
+                // Update UI
+                titleText.innerText = stepData.title;
+                descText.innerText = stepData.desc;
+                isAnimating = true;
+
+                // Play the keyframe range
+                const startTime = frameToTime(stepData.startFrame);
+                const endTime = frameToTime(stepData.endFrame);
+                
+                viewer.currentTime = startTime;
+                viewer.play();
+                viewer.loop = stepData.loop || false;
+
+                // Calculate duration for this step
+                const stepDuration = (endTime - startTime) * 1000; // Convert to milliseconds
+
+                // Monitor playback and advance to next step when done
+                function checkAutoPlayback() {
+                    if (!isAutoPlaying) return; // Stop if auto-play was cancelled
+
+                    if (viewer.currentTime >= endTime) {
+                        viewer.pause();
+                        isAnimating = false;
+                        
+                        // Wait a brief moment before next step, then continue
+                        autoPlayTimeout = setTimeout(() => {
+                            playNextAutoStep();
+                        }, 500); // 500ms pause between steps
+                    } else {
+                        requestAnimationFrame(checkAutoPlayback);
+                    }
+                }
+                
+                requestAnimationFrame(checkAutoPlayback);
+            }
+
+            // Start the sequence after a short delay
+            setTimeout(() => {
+                playNextAutoStep();
+            }, 1000); // 1 second delay before starting
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayTimeout) {
+                clearTimeout(autoPlayTimeout);
+                autoPlayTimeout = null;
+            }
+            isAutoPlaying = false;
+            isAnimating = false;
+            console.log('⏹️ Auto-play stopped');
         }
 
         // ============================================
