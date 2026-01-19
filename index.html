@@ -92,22 +92,24 @@
             left: 50%;
             transform: translateX(-50%);
             background: #007AFF;
-            color: white;
+            color: white !important;
             border: none;
             padding: 16px 32px;
             border-radius: 50px;
             font-size: 16px;
             font-weight: bold;
             box-shadow: 0 4px 20px rgba(0, 122, 255, 0.4);
-            z-index: 1000;
+            z-index: 99999 !important; /* Very high z-index to ensure it's above AR camera feed */
             cursor: pointer;
             transition: all 0.2s;
             display: none; /* Hidden by default, shown only in AR mode */
-            pointer-events: auto; /* Enable clicks */
+            pointer-events: auto !important; /* Enable clicks */
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             text-decoration: none;
             text-align: center;
+            opacity: 1 !important;
+            visibility: visible !important;
         }
 
         #ar-recipe-link:hover {
@@ -120,10 +122,21 @@
             transform: translateX(-50%) scale(0.95);
         }
 
-        /* Show link when AR is active */
+        /* Show link when AR is active - CSS-based for immediate visibility */
         model-viewer[ar-status="presenting"] ~ #ar-recipe-link,
         #ar-recipe-link.ar-active {
-            display: block;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 99999 !important;
+        }
+        
+        /* Also show when model-viewer has AR active class/attribute */
+        model-viewer[ar-status="presenting"] + * #ar-recipe-link,
+        body:has(model-viewer[ar-status="presenting"]) #ar-recipe-link {
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
     </style>
 </head>
@@ -155,7 +168,12 @@
     </div>
 
     <!-- AR Recipe Link - Overlays camera feed in AR mode -->
-    <a id="ar-recipe-link" href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" target="_blank" rel="noopener noreferrer">
+    <!-- Pre-positioned and ready to show instantly when AR activates -->
+    <a id="ar-recipe-link" 
+       href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" 
+       target="_blank" 
+       rel="noopener noreferrer"
+       style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 99999;">
         📖 View Recipe
     </a>
 
@@ -897,6 +915,7 @@
                 if (arRecipeLink) {
                     arRecipeLink.classList.remove('ar-active');
                     arRecipeLink.style.display = 'none';
+                    arRecipeLink.style.visibility = 'hidden';
                 }
                 
                 // Make sure button is visible if AR is available
@@ -908,11 +927,22 @@
                 console.log('AR is active!');
                 console.log('AR mode:', mode);
                 
-                // Show AR recipe link when AR mode is active
+                // Show AR recipe link immediately when AR mode is active - no delays
                 if (arRecipeLink) {
+                    // Ensure link is in the body (not inside model-viewer)
+                    if (arRecipeLink.parentElement !== document.body) {
+                        document.body.appendChild(arRecipeLink);
+                    }
+                    
+                    // Show immediately - just toggle visibility
                     arRecipeLink.classList.add('ar-active');
                     arRecipeLink.style.display = 'block';
-                    console.log('✅ AR recipe link shown');
+                    arRecipeLink.style.visibility = 'visible';
+                    arRecipeLink.style.opacity = '1';
+                    
+                    console.log('✅ AR recipe link shown immediately');
+                } else {
+                    console.error('❌ AR recipe link element not found!');
                 }
                 
                 if (mode === 'quick-look') {
