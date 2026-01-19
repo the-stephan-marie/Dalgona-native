@@ -551,6 +551,18 @@
         // Function to find which node was hit using raycasting
         function findHitNode(clientX, clientY) {
             if (!raycaster || !camera || !hierarchyNodes.length) {
+                console.warn('findHitNode: Missing required components', {
+                    hasRaycaster: !!raycaster,
+                    hasCamera: !!camera,
+                    hierarchyNodesCount: hierarchyNodes.length
+                });
+                return null;
+            }
+            
+            // Validate input coordinates
+            if (typeof clientX !== 'number' || typeof clientY !== 'number' || 
+                isNaN(clientX) || isNaN(clientY)) {
+                console.error('findHitNode: Invalid coordinates provided', { clientX, clientY });
                 return null;
             }
             
@@ -561,13 +573,29 @@
             const x = clientX - rect.left;
             const y = clientY - rect.top;
             
+            // Validate coordinates are within bounds
+            if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+                console.warn('findHitNode: Coordinates outside viewer bounds', {
+                    clientX, clientY,
+                    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                    relative: { x, y }
+                });
+                return null;
+            }
+            
             // Convert to normalized device coordinates (-1 to +1)
             const mouse = new THREE.Vector2();
             mouse.x = (x / rect.width) * 2 - 1;
             mouse.y = -(y / rect.height) * 2 + 1;
             
-            // Debug logging (remove after testing)
-            console.log('Click coords:', { clientX, clientY, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, normalized: { x: mouse.x, y: mouse.y } });
+            // Debug logging
+            console.log('🔍 Raycast at:', { 
+                clientX, 
+                clientY, 
+                relative: { x, y },
+                normalized: { x: mouse.x, y: mouse.y },
+                viewerSize: { width: rect.width, height: rect.height }
+            });
             
             // Get only interactive meshes (exclude ground, table, etc.)
             const interactiveMeshes = hierarchyNodes
@@ -617,6 +645,15 @@
             
             if (intersects.length > 0) {
                 const hitMesh = intersects[0].object;
+                const distance = intersects[0].distance;
+                
+                console.log('🎯 Raycast hit:', {
+                    meshName: hitMesh.name,
+                    distance: distance,
+                    point: intersects[0].point,
+                    totalIntersects: intersects.length,
+                    allHits: intersects.map(i => ({ name: i.object.name, distance: i.distance }))
+                });
                 
                 // Find which node this mesh belongs to
                 const hitNode = hierarchyNodes.find(node => {
@@ -631,8 +668,13 @@
                 });
                 
                 if (hitNode) {
+                    console.log('✅ Matched to node:', hitNode.name);
                     return hitNode.name;
+                } else {
+                    console.warn('⚠️ Hit mesh not found in hierarchyNodes:', hitMesh.name);
                 }
+            } else {
+                console.log('❌ No raycast intersections found');
             }
             
             return null;
@@ -939,16 +981,30 @@
             });
         });
 
+        // Track last click to prevent duplicate processing
+        let lastClickTime = 0;
+        let lastClickCoords = { x: null, y: null };
+        const CLICK_DEBOUNCE_MS = 100; // Prevent rapid duplicate clicks
+        
         // OBJECT-SPECIFIC CLICK HANDLER USING RAYCASTING
         viewer.addEventListener('click', (event) => {
+            const now = Date.now();
+            
             console.log('Click event fired!', {
                 target: event.target,
                 type: event.type,
+                isTrusted: event.isTrusted, // Check if it's a real user interaction
                 isInQuickLook: isInQuickLook,
                 currentARMode: currentARMode,
                 hasRaycaster: !!raycaster,
                 hierarchyNodesCount: hierarchyNodes.length
             });
+            
+            // Only process trusted events (real user interactions)
+            if (!event.isTrusted) {
+                console.warn('⚠️ Ignoring non-trusted event (programmatic click)');
+                return;
+            }
             
             // Warn if in Quick Look mode
             if (isInQuickLook) {
@@ -984,7 +1040,58 @@
                 clientY = event.clientY;
             }
             
-            console.log('Click coordinates:', { clientX, clientY });
+            // VALIDATION: Ensure coordinates are valid numbers
+            if (typeof clientX !== 'number' || typeof clientY !== 'number' || 
+                isNaN(clientX) || isNaN(clientY)) {
+                console.warn('⚠️ Invalid coordinates detected:', { clientX, clientY });
+                console.warn('Event details:', {
+                    hasTouches: !!event.touches,
+                    touchesLength: event.touches?.length,
+                    hasChangedTouches: !!event.changedTouches,
+                    changedTouchesLength: event.changedTouches?.length,
+                    clientX: event.clientX,
+                    clientY: event.clientY
+                });
+                return;
+            }
+            
+            // VALIDATION: Ensure coordinates are within viewer bounds
+            const rect = viewer.getBoundingClientRect();
+            const relativeX = clientX - rect.left;
+            const relativeY = clientY - rect.top;
+            
+            if (relativeX < 0 || relativeX > rect.width || relativeY < 0 || relativeY > rect.height) {
+                console.log('Click outside viewer bounds, ignoring:', {
+                    clientX, clientY,
+                    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                    relative: { x: relativeX, y: relativeY }
+                });
+                return;
+            }
+            
+            console.log('✅ Valid click coordinates:', { 
+                clientX, 
+                clientY,
+                relativeX,
+                relativeY,
+                viewerSize: { width: rect.width, height: rect.height }
+            });
+            
+            // Debounce: Prevent processing duplicate clicks at same location
+            const timeSinceLastClick = now - lastClickTime;
+            const sameLocation = lastClickCoords.x === clientX && lastClickCoords.y === clientY;
+            
+            if (timeSinceLastClick < CLICK_DEBOUNCE_MS && sameLocation) {
+                console.log('⚠️ Ignoring duplicate click at same location:', {
+                    timeSinceLastClick,
+                    coords: { x: clientX, y: clientY }
+                });
+                return;
+            }
+            
+            // Update last click tracking
+            lastClickTime = now;
+            lastClickCoords = { x: clientX, y: clientY };
             
             // Check if raycasting is ready
             if (!raycaster || !hierarchyNodes.length) {
