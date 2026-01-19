@@ -469,6 +469,15 @@
             // USDZ file provides native animation support in Quick Look
             iosModelPath: 'assets/Dalgona-OneTake_0001.usdz',
             
+            // iOS Quick Look Banner Configuration
+            // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
+            iosBanner: {
+                callToAction: 'Visit Recipe',
+                checkoutTitle: 'NESCAFÉ® 3in1 Dalgona',
+                checkoutSubtitle: 'How to make Dalgona Coffee Recipe',
+                canonicalWebPageURL: 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona'
+            },
+            
             // Animation name (single track)
             animationName: 'animation_0',
             
@@ -551,11 +560,56 @@
 
         // Set model paths from config
         viewer.src = CONFIG.modelPath;
-        // Set iOS source (USDZ provides better iOS Quick Look support with native animations)
+        // Set iOS source with Quick Look banner parameters
         if (CONFIG.iosModelPath) {
-            viewer.setAttribute('ios-src', CONFIG.iosModelPath);
+            // Build iOS URL with banner parameters
+            // Parameters are appended with # and separated by &
+            // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
+            // Note: USDZ URL should be absolute for banner parameters to work
+            let iosUrl = CONFIG.iosModelPath;
+            
+            // Convert relative path to absolute URL if needed
+            if (!iosUrl.startsWith('http://') && !iosUrl.startsWith('https://')) {
+                // Use current origin to create absolute URL
+                const baseUrl = window.location.origin;
+                const path = iosUrl.startsWith('/') ? iosUrl : `/${iosUrl}`;
+                iosUrl = `${baseUrl}${path}`;
+            }
+            
+            if (CONFIG.iosBanner) {
+                const banner = CONFIG.iosBanner;
+                const params = [];
+                
+                // Add banner parameters (URL encoded)
+                if (banner.callToAction) {
+                    params.push(`callToAction=${encodeURIComponent(banner.callToAction)}`);
+                }
+                if (banner.checkoutTitle) {
+                    params.push(`checkoutTitle=${encodeURIComponent(banner.checkoutTitle)}`);
+                }
+                if (banner.checkoutSubtitle) {
+                    params.push(`checkoutSubtitle=${encodeURIComponent(banner.checkoutSubtitle)}`);
+                }
+                if (banner.canonicalWebPageURL) {
+                    params.push(`canonicalWebPageURL=${encodeURIComponent(banner.canonicalWebPageURL)}`);
+                }
+                if (banner.price) {
+                    params.push(`price=${encodeURIComponent(banner.price)}`);
+                }
+                
+                // Append parameters to USDZ URL with #
+                if (params.length > 0) {
+                    iosUrl = `${iosUrl}#${params.join('&')}`;
+                }
+                
+                console.log('✅ iOS Quick Look banner configured');
+                console.log('Banner parameters:', banner);
+            }
+            
+            viewer.setAttribute('ios-src', iosUrl);
             console.log('✅ USDZ file configured for iOS Quick Look:', CONFIG.iosModelPath);
-            console.log('📱 Quick Look will use USDZ file for better animation support');
+            console.log('📱 Quick Look will use USDZ file with banner support');
+            console.log('iOS URL with banner:', iosUrl);
         } else {
             console.log('⚠️ No USDZ file specified - iOS will use GLB (may have limitations)');
         }
@@ -1056,6 +1110,7 @@
                     console.log('📱 Quick Look supports built-in animations from USDZ files');
                     console.log('📖 See: https://developer.apple.com/augmented-reality/quick-look/');
                     console.log('✅ USDZ file detected:', CONFIG.iosModelPath);
+                    console.log('📋 Quick Look banner configured:', CONFIG.iosBanner);
                     console.warn('⚠️ Quick Look does NOT support JavaScript-controlled interactions');
                     console.warn('⚠️ Tap-to-advance (JavaScript) will NOT work in Quick Look');
                     console.log('🎬 Attempting to play full animation sequence before Quick Look launch...');
@@ -1130,6 +1185,21 @@
                     console.info('Scene Viewer (Android) requires a mobile device.');
                     console.info('WebXR AR may still be available - try clicking the AR button.');
                 }
+            }
+        });
+
+        // ============================================
+        // iOS QUICK LOOK BANNER TAP LISTENER
+        // ============================================
+        // Listen for banner taps in Quick Look
+        // According to Variant 3D docs, taps trigger a 'message' event
+        // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
+        viewer.addEventListener('message', (event) => {
+            if (event.data === '_apple_ar_quicklook_button_tapped') {
+                console.log('🔗 iOS Quick Look banner tapped!');
+                console.log('User tapped the banner button - redirecting to recipe page');
+                // The banner will automatically redirect via canonicalWebPageURL
+                // But we can also track this event for analytics
             }
         });
         
