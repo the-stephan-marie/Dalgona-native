@@ -138,19 +138,17 @@
         /* Show link when AR is active - CSS-based for immediate visibility */
         /* AR Recipe Card - WebXR DOM Overlay (projects onto camera feed) */
         /* Hide the card by default (so it doesn't show on the 3D viewer) */
+        /* AR Recipe Card - Hidden by default */
         #ar-recipe-card {
             display: none;
         }
 
-        /* Hide when model-viewer is defined but AR session hasn't started */
-        model-viewer:defined:not([ar-status="session-started"]) #ar-recipe-card {
-            display: none;
-        }
-
-        /* When WebXR AR session starts, show the card */
-        model-viewer[ar-status="session-started"] #ar-recipe-card {
-            display: flex;
-            position: absolute;
+        /* When WebXR AR session starts (session-started or presenting), show the card */
+        /* Note: slot="ar-overlay" elements are moved to a special overlay container by model-viewer */
+        model-viewer[ar-status="session-started"] #ar-recipe-card,
+        model-viewer[ar-status="presenting"] #ar-recipe-card {
+            display: flex !important;
+            position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
@@ -161,26 +159,14 @@
             padding-bottom: calc(16px + env(safe-area-inset-bottom));
             border-radius: 10px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-            z-index: 9999; /* Ensure it sits on top of the camera feed */
+            z-index: 99999;
             pointer-events: auto;
         }
         
-        /* Fallback for other AR status values (presenting, etc.) */
-        model-viewer[ar-status="presenting"] #ar-recipe-card {
-            display: flex;
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 90%;
-            max-width: 500px;
-            background: white;
-            padding: 16px 20px;
-            padding-bottom: calc(16px + env(safe-area-inset-bottom));
-            border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-            z-index: 9999;
-            pointer-events: auto;
+        /* Also target the element directly when AR is active */
+        model-viewer[ar-status="session-started"] slot[name="ar-overlay"] #ar-recipe-card,
+        model-viewer[ar-status="presenting"] slot[name="ar-overlay"] #ar-recipe-card {
+            display: flex !important;
         }
 
         .ar-recipe-content {
@@ -1064,6 +1050,26 @@
                     console.log('Android version check:', /Android/.test(navigator.userAgent));
                 }
                 console.log('=== END AR FAILURE DIAGNOSTICS ===');
+            } else if (status === 'session-started') {
+                console.log('✅ WebXR AR session started!');
+                console.log('AR mode:', mode || 'webxr (inferred)');
+                
+                // Show AR recipe card for WebXR mode
+                if (arRecipeCard) {
+                    // Force visibility for WebXR DOM overlay
+                    arRecipeCard.style.display = 'flex';
+                    arRecipeCard.style.position = 'fixed';
+                    arRecipeCard.style.bottom = '20px';
+                    arRecipeCard.style.left = '50%';
+                    arRecipeCard.style.transform = 'translateX(-50%)';
+                    arRecipeCard.style.zIndex = '99999';
+                    arRecipeCard.style.width = '90%';
+                    arRecipeCard.style.maxWidth = '500px';
+                    console.log('✅ AR recipe card visibility enabled for WebXR session');
+                    console.log('✅ WebXR mode supports HTML overlays (slot="ar-overlay")');
+                } else {
+                    console.error('❌ AR recipe card element not found!');
+                }
             } else if (status === 'not-presenting') {
                 console.log('AR available but not active');
                 isInQuickLook = false;
@@ -1077,9 +1083,11 @@
                     viewer.src = CONFIG.modelPath;
                 }
                 
-                // AR recipe card visibility is handled by CSS selectors
-                // No need to manually hide/show when using slot="ar-overlay"
-                console.log('AR mode exited - card will be hidden by CSS');
+                // Hide AR recipe card when exiting AR
+                if (arRecipeCard) {
+                    arRecipeCard.style.display = 'none';
+                }
+                console.log('AR mode exited - card hidden');
                 
                 // Make sure button is visible if AR is available
                 if (mode === 'webxr' && !isMobileDevice()) {
@@ -1096,16 +1104,25 @@
                     viewer.src = CONFIG.arModelPath;
                 }
                 
-                // AR recipe card visibility is handled automatically by model-viewer
-                // when using slot="ar-overlay" - it will appear when AR session starts
+                // AR recipe card visibility - ensure it's visible for WebXR
                 // NOTE: slot="ar-overlay" ONLY works with WebXR, NOT Scene Viewer or Quick Look
                 if (arRecipeCard) {
-                    if (mode === 'webxr') {
-                        console.log('✅ AR session started - recipe card will appear via DOM Overlay');
+                    if (mode === 'webxr' || !mode) {
+                        // WebXR mode (or mode not yet determined but status is presenting)
+                        console.log('✅ AR presenting - recipe card should be visible via DOM Overlay');
                         console.log('✅ WebXR mode supports HTML overlays (slot="ar-overlay")');
+                        // Ensure visibility
+                        arRecipeCard.style.display = 'flex';
+                        arRecipeCard.style.position = 'fixed';
+                        arRecipeCard.style.bottom = '20px';
+                        arRecipeCard.style.left = '50%';
+                        arRecipeCard.style.transform = 'translateX(-50%)';
+                        arRecipeCard.style.zIndex = '99999';
+                        console.log('✅ AR recipe card visibility confirmed for WebXR');
                     } else {
                         console.warn('⚠️ Recipe card will NOT appear in', mode, 'mode');
                         console.warn('⚠️ slot="ar-overlay" only works with WebXR');
+                        arRecipeCard.style.display = 'none';
                     }
                     console.log('AR status:', status);
                     console.log('AR mode:', mode);
