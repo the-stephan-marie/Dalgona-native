@@ -747,7 +747,17 @@
                     camera.aspect = rect.width / rect.height;
                     // Get FOV from model-viewer (field-of-view attribute or property)
                     const fieldOfView = viewer.fieldOfView || viewer.__fieldOfView || viewer.getAttribute('field-of-view');
-                    camera.fov = fieldOfView ? parseFloat(fieldOfView) : 45; // Default to 45 if not available
+                    let fovValue = 45; // Default FOV
+                    if (fieldOfView) {
+                        const parsed = parseFloat(fieldOfView);
+                        // Validate: must be a number, finite, and between reasonable bounds (10-120 degrees)
+                        if (!isNaN(parsed) && isFinite(parsed) && parsed > 10 && parsed < 120) {
+                            fovValue = parsed;
+                        } else {
+                            console.warn('Invalid FOV value from model-viewer, using default:', fieldOfView);
+                        }
+                    }
+                    camera.fov = fovValue;
                     camera.updateProjectionMatrix();
                     camera.updateMatrixWorld(true);
                 }
@@ -759,7 +769,17 @@
                 camera.aspect = rect.width / rect.height;
                 // Get FOV from model-viewer (field-of-view attribute or property)
                 const fieldOfView = viewer.fieldOfView || viewer.__fieldOfView || viewer.getAttribute('field-of-view');
-                camera.fov = fieldOfView ? parseFloat(fieldOfView) : 45; // Default to 45 if not available
+                let fovValue = 45; // Default FOV
+                if (fieldOfView) {
+                    const parsed = parseFloat(fieldOfView);
+                    // Validate: must be a number, finite, and between reasonable bounds (10-120 degrees)
+                    if (!isNaN(parsed) && isFinite(parsed) && parsed > 10 && parsed < 120) {
+                        fovValue = parsed;
+                    } else {
+                        console.warn('Invalid FOV value from model-viewer, using default:', fieldOfView);
+                    }
+                }
+                camera.fov = fovValue;
                 camera.updateProjectionMatrix();
                 camera.updateMatrixWorld(true);
             }
@@ -771,6 +791,17 @@
                 aspect: camera.aspect,
                 matrixWorldNeedsUpdate: camera.matrixWorldNeedsUpdate
             });
+            
+            // Validate camera is ready for raycasting
+            if (isNaN(camera.fov) || !isFinite(camera.fov) || camera.fov <= 0) {
+                console.error('Invalid camera FOV, cannot raycast:', camera.fov);
+                return null;
+            }
+            
+            if (isNaN(camera.aspect) || !isFinite(camera.aspect) || camera.aspect <= 0) {
+                console.error('Invalid camera aspect, cannot raycast:', camera.aspect);
+                return null;
+            }
             
             // Update raycaster with the tap coordinates
             try {
