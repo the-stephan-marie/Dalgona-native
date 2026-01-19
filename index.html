@@ -238,6 +238,8 @@
         src="assets/Dalgona-OneTake_0001.glb"
         ar
         ar-modes="webxr scene-viewer quick-look"
+        link="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona"
+        title="NESCAFÉ® 3in1 Dalgona Recipe"
         camera-controls
         disable-tap
         shadow-intensity="1.2"
@@ -942,7 +944,7 @@
                     } else {
                         // Finished
                         if (currentStepIndex < CONFIG.steps.length - 1) {
-                            descText.innerText = CONFIG.continuePrompt;
+                            descText.innerText = 'Tap to continue';
                         }
                     }
                 } else {
@@ -1096,8 +1098,15 @@
                 
                 // AR recipe card visibility is handled automatically by model-viewer
                 // when using slot="ar-overlay" - it will appear when AR session starts
+                // NOTE: slot="ar-overlay" ONLY works with WebXR, NOT Scene Viewer or Quick Look
                 if (arRecipeCard) {
-                    console.log('✅ AR session started - recipe card will appear via DOM Overlay');
+                    if (mode === 'webxr') {
+                        console.log('✅ AR session started - recipe card will appear via DOM Overlay');
+                        console.log('✅ WebXR mode supports HTML overlays (slot="ar-overlay")');
+                    } else {
+                        console.warn('⚠️ Recipe card will NOT appear in', mode, 'mode');
+                        console.warn('⚠️ slot="ar-overlay" only works with WebXR');
+                    }
                     console.log('AR status:', status);
                     console.log('AR mode:', mode);
                 } else {
@@ -1161,6 +1170,11 @@
                     isInQuickLook = false;
                     console.log('✅ Scene Viewer AR active (Android)');
                     console.warn('⚠️ Scene Viewer may have limited JavaScript support.');
+                    console.log('📋 Scene Viewer banner configured via link attribute:', viewer.link);
+                    console.log('📋 Scene Viewer title:', viewer.title);
+                    console.log('💡 Scene Viewer 1.1+ supports visit button/banner via link parameter');
+                    console.log('💡 The banner should appear as a "Visit" button in Scene Viewer');
+                    console.warn('⚠️ HTML overlays (slot="ar-overlay") do NOT work in Scene Viewer');
                     console.log('🎬 Starting automatic animation playback in AR mode...');
                     
                     // Enable autoplay for AR mode
@@ -1254,6 +1268,22 @@
                     console.log('Mobile device detected');
                     console.log('AR available:', viewer.arAvailable);
                     console.log('AR supported:', viewer.arSupported);
+                    
+                    // Check WebXR support on mobile too (for Android)
+                    const mobileWebXRSupported = await checkWebXRSupport();
+                    console.log('WebXR support on mobile:', mobileWebXRSupported);
+                    
+                    if (mobileWebXRSupported) {
+                        console.log('✅ WebXR IS available on this mobile device!');
+                        console.log('💡 WebXR should be prioritized over Scene Viewer');
+                        console.log('💡 WebXR supports HTML overlays (slot="ar-overlay")');
+                        console.log('⚠️ If Scene Viewer launches instead, the recipe card will NOT appear');
+                    } else {
+                        console.warn('⚠️ WebXR NOT available on this mobile device');
+                        console.warn('⚠️ Will fall back to Scene Viewer (Android) or Quick Look (iOS)');
+                        console.warn('⚠️ Scene Viewer does NOT support HTML overlays');
+                        console.warn('⚠️ Recipe card will NOT appear in Scene Viewer mode');
+                    }
                     
                     if (!viewer.arAvailable) {
                         console.warn('AR not available on this mobile device');
@@ -1445,12 +1475,7 @@
             
             if (!nodeName) {
                 // Clicked on empty space - show feedback
-                if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
-                    const stepData = CONFIG.steps[currentStepIndex];
-                    descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
-                } else {
-                    descText.innerText = 'Tap an object to start!';
-                }
+                descText.innerText = 'Tap to continue';
                 return;
             }
             
@@ -1461,10 +1486,7 @@
             if (objectStepIndex === -1) {
                 // Clicked node is not interactive
                 console.log('Node is not in interactive objects list:', nodeName);
-                if (currentStepIndex >= 0 && currentStepIndex < CONFIG.steps.length) {
-                    const stepData = CONFIG.steps[currentStepIndex];
-                    descText.innerText = stepData.objectHint || CONFIG.continuePrompt;
-                }
+                descText.innerText = 'Tap to continue';
                 return;
             }
             
@@ -1478,11 +1500,11 @@
             } else if (objectStepIndex < expectedStepIndex) {
                 // Clicked an object from a previous step
                 console.log('⚠️ Clicked previous step object');
-                descText.innerText = 'This step has already been completed. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
+                descText.innerText = 'Tap to continue';
             } else {
                 // Clicked an object from a future step
                 console.log('⚠️ Clicked future step object');
-                descText.innerText = 'Complete previous steps first. ' + (CONFIG.steps[expectedStepIndex]?.objectHint || '');
+                descText.innerText = 'Tap to continue';
             }
         });
         
@@ -1572,7 +1594,7 @@
 
             // Update UI
             titleText.innerText = stepData.title;
-            descText.innerText = stepData.desc;
+            descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
             isAnimating = true;
 
             // Play the keyframe range
@@ -1631,7 +1653,7 @@
 
                 // Update UI
                 titleText.innerText = stepData.title;
-                descText.innerText = stepData.desc;
+                descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
                 isAnimating = true;
 
                 // Play the keyframe range
