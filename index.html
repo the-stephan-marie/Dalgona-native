@@ -459,8 +459,11 @@
         // ============================================
         
         const CONFIG = {
-            // Path to your 3D model (GLB format)
+            // Path to your 3D model (GLB format) - for 3D viewer mode
             modelPath: 'assets/Dalgona-OneTake_0001.glb',
+            
+            // Path to compressed model for AR mode (smaller file size for better AR performance)
+            arModelPath: 'assets/dalgona-compressed.glb',
             
             // Path to iOS USDZ format (for better iOS Quick Look support)
             // USDZ file provides native animation support in Quick Look
@@ -1012,6 +1015,12 @@
                 // Stop auto-play when exiting AR mode
                 stopAutoPlay();
                 
+                // Switch back to original model when exiting AR mode
+                if (CONFIG.arModelPath && viewer.src !== CONFIG.modelPath) {
+                    console.log('🔄 Switching back to original model for 3D viewer');
+                    viewer.src = CONFIG.modelPath;
+                }
+                
                 // AR recipe card visibility is handled by CSS selectors
                 // No need to manually hide/show when using slot="ar-overlay"
                 console.log('AR mode exited - card will be hidden by CSS');
@@ -1024,6 +1033,12 @@
             } else if (status === 'presenting') {
                 console.log('AR is active!');
                 console.log('AR mode:', mode);
+                
+                // Switch to compressed model for AR mode (better performance)
+                if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
+                    console.log('🔄 Switching to compressed model for AR mode:', CONFIG.arModelPath);
+                    viewer.src = CONFIG.arModelPath;
+                }
                 
                 // AR recipe card visibility is handled automatically by model-viewer
                 // when using slot="ar-overlay" - it will appear when AR session starts
