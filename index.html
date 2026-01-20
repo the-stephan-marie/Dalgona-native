@@ -133,41 +133,71 @@
             z-index: 100;
         }
 
+        /* Light sweep animation */
+        @keyframes lightSweep {
+            0% {
+                background-position: -200% center;
+            }
+            100% {
+                background-position: 200% center;
+            }
+        }
+
         /* The Branding / Instruction Card */
         .card {
             display: inline-block;
-            background: white;
+            background: #dc2626; /* Red background */
+            background-image: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.3) 50%,
+                transparent 100%
+            );
+            background-size: 200% 100%;
+            background-position: -200% center;
+            animation: lightSweep 3s ease-in-out infinite;
             padding: 16px 24px;
             border-radius: 50px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.4), /* Drop shadow */
+                0 0 20px rgba(220, 38, 38, 0.3); /* Faint outer glow */
             transform: translateY(0);
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             pointer-events: auto; /* Enable clicks on the card */
             cursor: pointer; /* Show it's clickable */
+            position: relative;
         }
 
         .card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+            box-shadow: 
+                0 12px 35px rgba(0, 0, 0, 0.5), /* Stronger drop shadow on hover */
+                0 0 25px rgba(220, 38, 38, 0.4); /* Stronger glow on hover */
         }
 
         .card:active {
             transform: translateY(0);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            box-shadow: 
+                0 8px 25px rgba(0, 0, 0, 0.4),
+                0 0 15px rgba(220, 38, 38, 0.3);
         }
 
         .card h2 {
             margin: 0;
             font-size: 18px;
-            color: #333;
+            color: #ffffff; /* White text */
             text-transform: uppercase;
             letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
         }
 
         .card p {
             margin: 4px 0 0 0;
             font-size: 14px;
-            color: #555;
+            color: #ffffff; /* White text */
+            position: relative;
+            z-index: 1;
         }
 
         /* Hide UI while loading */
@@ -321,6 +351,7 @@
         disable-tap
         shadow-intensity="1.2"
         environment-image="assets/bryanston_park_sunrise_1k.hdr" 
+        exposure="1.1"
         tone-mapping="commerce"
         animation-name="animation_0">
         
