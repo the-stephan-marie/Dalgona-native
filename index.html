@@ -43,6 +43,7 @@
             height: auto;
             display: block;
             object-fit: contain;
+            margin-bottom: 30px;
         }
         
         /* Recipe Name - Below Header */
@@ -59,7 +60,7 @@
             text-align: center;
             margin: 0;
             line-height: 1.3;
-            padding: 0 20px;
+            padding: 30px 20px 0 20px;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
         
@@ -71,30 +72,38 @@
             
             #logo {
                 max-width: 80%;
+                margin-bottom: 25px;
             }
             
             #recipe-name {
                 top: 70px;
                 font-size: 16px;
-                padding: 0 16px;
+                padding: 25px 16px 0 16px;
             }
         }
         
         @media (min-width: 481px) and (max-width: 768px) {
             #logo {
                 max-width: 82%;
+                margin-bottom: 28px;
             }
             
             #recipe-name {
                 top: 75px;
                 font-size: 17px;
+                padding: 28px 20px 0 20px;
             }
         }
         
         @media (min-width: 769px) {
+            #logo {
+                margin-bottom: 35px;
+            }
+            
             #recipe-name {
                 top: 90px;
                 font-size: 20px;
+                padding: 35px 20px 0 20px;
             }
         }
         
@@ -313,8 +322,7 @@
         shadow-intensity="1.2"
         environment-image="assets/bryanston_park_sunrise_1k.hdr" 
         tone-mapping="commerce"
-        animation-name="animation_0"
-        autoplay="true">
+        animation-name="animation_0">
         
         <!-- AR button removed - will be shown in card after step 6 -->
         
@@ -519,7 +527,7 @@
             console.log('⚠️ No USDZ file specified - iOS will use GLB (may have limitations)');
         }
         viewer.animationName = CONFIG.animationName;
-        viewer.autoplay = true;  // Temporarily enabled for testing AR mode animations
+        viewer.autoplay = false;  // Disabled - animations play on user interaction
         viewer.loop = false;
 
         // Set welcome message
@@ -836,6 +844,8 @@
                 if (!isAnimating) return; // Stop if user advanced
                 
                 if (viewer.currentTime >= endTime) {
+                    // Ensure we're exactly on the final frame
+                    viewer.currentTime = endTime;
                     viewer.pause();
                     isAnimating = false;
                     
@@ -845,7 +855,7 @@
                         viewer.play();
                         requestAnimationFrame(checkPlayback);
                     } else {
-                        // Finished
+                        // Finished - stay on final frame
                         if (currentStepIndex < CONFIG.steps.length - 1) {
                             // Show next step's description
                             const nextStep = CONFIG.steps[currentStepIndex + 1];
@@ -1824,6 +1834,8 @@
                     if (!isAutoPlaying) return; // Stop if auto-play was cancelled
 
                     if (viewer.currentTime >= endTime) {
+                        // Ensure we're exactly on the final frame
+                        viewer.currentTime = endTime;
                         viewer.pause();
                         isAnimating = false;
                         
