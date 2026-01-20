@@ -430,10 +430,19 @@
                 { 
                     startFrame: 300,
                     endFrame: 360,
+                    title: 'Ready to sip.',
+                    desc: '',
+                    objectHint: 'Tap to continue',
+                    loop: false
+                },
+                { 
+                    startFrame: 360,
+                    endFrame: 360,
                     title: 'Enjoy your NESCAFÉ® 3in1 Dalgona Coffee Cup', 
                     desc: 'Tap to see view it in your space',
                     objectHint: 'Tap to view in AR',
-                    loop: false
+                    loop: false,
+                    noAnimation: true  // Flag to indicate this step doesn't play animation
                 }
             ],
             
@@ -870,8 +879,9 @@
                                 // This ensures we know AR status before step 5 completes
                             }
                         } else {
-                            // Last step completed - handle based on AR capability
-                            handleStep6Completion();
+                            // Step 6 completed - advance to Step 7 (AR launch step)
+                            // Step 7 doesn't play animation, just shows UI
+                            playNextStep();
                         }
                     }
                 } else {
@@ -1562,25 +1572,29 @@
                     return;
                 }
                 
-                // Check if step 6 is completed
-                const isStep6Completed = currentStepIndex === CONFIG.steps.length - 1;
+                // Check if step 7 is completed (the AR launch step)
+                const isStep7Completed = currentStepIndex === CONFIG.steps.length - 1 && CONFIG.steps[currentStepIndex]?.noAnimation;
                 
-                // Ignore if animating (unless it's a looping step OR step 6 is completed)
-                // Allow clicks after step 6 completes even if animation flag is still set
-                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep6Completed) {
+                // Ignore if animating (unless it's a looping step OR step 7 is completed)
+                // Allow clicks after step 7 completes even if animation flag is still set
+                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep7Completed) {
                     
                     return;
                 }
                 
                 
                 
-                // Check if step 6 is completed - if so, launch AR or redirect
-                if (isStep6Completed) {
-                    if (hasARCapability) {
-                        // Step 6 completed and device has AR - launch AR with compressed model
+                // Check if step 7 is completed - if so, launch AR or redirect
+                if (isStep7Completed) {
+                    const isMobile = isMobileDevice();
+                    
+                    // Only launch AR if mobile AND has AR capability
+                    // Desktop users and mobile users without AR redirect to recipe page
+                    if (hasARCapability && isMobile) {
+                        // Step 7 completed and device has AR - launch AR with compressed model
                         launchARWithCompressedModel();
                     } else {
-                        // Step 6 completed but no AR - redirect to recipe page
+                        // Step 7 completed but no AR (or desktop) - redirect to recipe page
                         window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
                     }
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
@@ -1694,28 +1708,39 @@
             currentStepIndex++;
             const stepData = CONFIG.steps[currentStepIndex];
 
-            // Check if this is the last step (step 6)
-            const isLastStep = currentStepIndex === CONFIG.steps.length - 1;
+            // Check if this is Step 7 (no animation step)
+            if (stepData.noAnimation) {
+                // Step 7 - just update UI, no animation
+                titleText.innerText = stepData.title;
+                descText.innerText = stepData.desc;
+                isAnimating = false;
+                // Handle Step 7 completion UI
+                handleStep7Completion();
+                return;
+            }
 
             // Update UI - use step's title and desc directly
             titleText.innerText = stepData.title;
             descText.innerText = stepData.desc;
             
-            // Note: Last step completion is handled by handleStep6Completion() in playKeyframeRange
+            // Note: Step 6 completion advances to Step 7, Step 7 completion handled by handleStep7Completion()
             isAnimating = true;
 
             // Play the keyframe range
             playKeyframeRange(stepData);
         }
 
-        // Function to handle step 6 completion based on AR capability
-        function handleStep6Completion() {
-            const step6Data = CONFIG.steps[CONFIG.steps.length - 1];
+        // Function to handle step 7 completion based on AR capability and device type
+        function handleStep7Completion() {
+            const step7Data = CONFIG.steps[CONFIG.steps.length - 1];
+            const isMobile = isMobileDevice();
             
-            if (hasARCapability) {
-                // Device has AR - show welcome card with AR prompt
-                titleText.innerText = step6Data.title;
-                descText.innerText = step6Data.desc;
+            // Only show AR prompt if mobile AND has AR capability
+            // Desktop users and mobile users without AR see the recipe message
+            if (hasARCapability && isMobile) {
+                // Mobile device with AR - show welcome card with AR prompt
+                titleText.innerText = step7Data.title;
+                descText.innerText = step7Data.desc;
                 // Ensure welcome card is visible
                 if (card) {
                     card.style.display = 'inline-block';
@@ -1726,7 +1751,7 @@
                     arRecipeCard.classList.remove('show-in-viewer');
                 }
             } else {
-                // Device doesn't have AR - show recipe message on welcome card
+                // Desktop or mobile without AR - show recipe message on welcome card
                 titleText.innerText = 'Discover 30 days of Nescafe recipes this Ramadan.';
                 descText.innerText = '';
                 // Ensure welcome card is visible
@@ -1786,10 +1811,15 @@
                     // All steps completed
                     
                     isAutoPlaying = false;
-                    const lastStep = CONFIG.steps[CONFIG.steps.length - 1];
-                    titleText.innerText = lastStep.title;
-                    // Handle step 6 completion based on AR capability
-                    handleStep6Completion();
+                    // Check if we're at Step 6 (last animation step) or Step 7 (AR launch step)
+                    const stepData = CONFIG.steps[currentStepIndex];
+                    if (stepData.noAnimation) {
+                        // Step 7 - handle completion
+                        handleStep7Completion();
+                    } else {
+                        // Step 6 completed - advance to Step 7
+                        playNextStep();
+                    }
                     
                     // Recipe link doesn't need reset (it's just a link)
                     return;
@@ -1798,6 +1828,18 @@
                 // Advance to next step
                 currentStepIndex++;
                 const stepData = CONFIG.steps[currentStepIndex];
+                
+                // Check if this is Step 7 (no animation step)
+                if (stepData.noAnimation) {
+                    // Step 7 - just update UI, no animation
+                    titleText.innerText = stepData.title;
+                    descText.innerText = stepData.desc;
+                    isAnimating = false;
+                    handleStep7Completion();
+                    // Step 7 is the last step - stop auto-playing
+                    isAutoPlaying = false;
+                    return;
+                }
                 
                 
 
