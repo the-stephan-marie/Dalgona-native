@@ -590,6 +590,8 @@
             // Set initial time to frame 0
             viewer.currentTime = frameToTime(0);
             viewer.pause();
+            // Ensure looping is disabled from the start
+            viewer.loop = false;
             
             // Access hierarchy and build mappings
             setupHitDetection();
@@ -872,11 +874,15 @@
             const startTime = frameToTime(stepData.startFrame);
             const endTime = frameToTime(stepData.endFrame);
             
+            // Explicitly disable looping before setting time
+            viewer.loop = false;
+            
             // Set the start time
             viewer.currentTime = startTime;
             
             // Play the animation
             viewer.play();
+            // Ensure loop is set correctly (should be false for all steps)
             viewer.loop = stepData.loop || false;
             
             // Monitor playback using requestAnimationFrame for smooth control
@@ -887,6 +893,8 @@
                     // Ensure we're exactly on the final frame
                     viewer.currentTime = endTime;
                     viewer.pause();
+                    // Explicitly disable looping to prevent any automatic restart
+                    viewer.loop = false;
                     isAnimating = false;
                     
                     if (stepData.loop) {
@@ -896,6 +904,10 @@
                         requestAnimationFrame(checkPlayback);
                     } else {
                         // Finished - stay on final frame
+                        // Ensure loop is disabled
+                        viewer.loop = false;
+                        viewer.pause();
+                        
                         if (currentStepIndex < CONFIG.steps.length - 1) {
                             // Show next step's description
                             const nextStep = CONFIG.steps[currentStepIndex + 1];
