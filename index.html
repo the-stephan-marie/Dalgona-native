@@ -460,7 +460,7 @@
                 },
                 { 
                     startFrame: 300,
-                    endFrame: 360,
+                    endFrame: 358,
                     title: 'Ready to sip.',
                     desc: '',
                     objectHint: 'Tap to continue',
@@ -885,9 +885,54 @@
             // Ensure loop is set correctly (should be false for all steps)
             viewer.loop = stepData.loop || false;
             
+            // Add event listener to catch when animation reaches end
+            const handleTimeUpdate = () => {
+                // Clamp currentTime to prevent going beyond endTime
+                if (viewer.currentTime > endTime) {
+                    viewer.currentTime = endTime;
+                    viewer.pause();
+                    viewer.loop = false;
+                    isAnimating = false;
+                    viewer.removeEventListener('timeupdate', handleTimeUpdate);
+                    
+                    // Handle completion
+                    if (!stepData.loop) {
+                        if (currentStepIndex < CONFIG.steps.length - 1) {
+                            // Show next step's description
+                            const nextStep = CONFIG.steps[currentStepIndex + 1];
+                            if (nextStep) {
+                                titleText.innerText = nextStep.title;
+                                descText.innerText = nextStep.desc;
+                            }
+                            
+                            // If step 4 (index 3) just completed, ensure AR capability is determined before step 5
+                            if (currentStepIndex === 3) {
+                                // AR capability should already be checked, but verify it's set
+                                // This ensures we know AR status before step 5 completes
+                            }
+                        } else {
+                            // Step 6 completed - wait for user to click card to advance to Step 7
+                            // Don't auto-advance - let user control when to proceed
+                            // The card will be clickable to advance to Step 7
+                        }
+                    }
+                }
+            };
+            
+            // Listen for time updates
+            viewer.addEventListener('timeupdate', handleTimeUpdate);
+            
             // Monitor playback using requestAnimationFrame for smooth control
             function checkPlayback() {
-                if (!isAnimating) return; // Stop if user advanced
+                if (!isAnimating) {
+                    viewer.removeEventListener('timeupdate', handleTimeUpdate);
+                    return; // Stop if user advanced
+                }
+                
+                // Clamp currentTime to prevent looping beyond endTime
+                if (viewer.currentTime > endTime) {
+                    viewer.currentTime = endTime;
+                }
                 
                 if (viewer.currentTime >= endTime) {
                     // Ensure we're exactly on the final frame
@@ -896,6 +941,7 @@
                     // Explicitly disable looping to prevent any automatic restart
                     viewer.loop = false;
                     isAnimating = false;
+                    viewer.removeEventListener('timeupdate', handleTimeUpdate);
                     
                     if (stepData.loop) {
                         // Restart this range
@@ -922,9 +968,9 @@
                                 // This ensures we know AR status before step 5 completes
                             }
                         } else {
-                            // Step 6 completed - advance to Step 7 (AR launch step)
-                            // Step 7 doesn't play animation, just shows UI
-                            playNextStep();
+                            // Step 6 completed - wait for user to click card to advance to Step 7
+                            // Don't auto-advance - let user control when to proceed
+                            // The card will be clickable to advance to Step 7
                         }
                     }
                 } else {
@@ -1618,9 +1664,12 @@
                 // Check if step 7 is completed (the AR launch step)
                 const isStep7Completed = currentStepIndex === CONFIG.steps.length - 1 && CONFIG.steps[currentStepIndex]?.noAnimation;
                 
-                // Ignore if animating (unless it's a looping step OR step 7 is completed)
-                // Allow clicks after step 7 completes even if animation flag is still set
-                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep7Completed) {
+                // Check if Step 6 just completed (index 5) - allow advancing to Step 7
+                const isStep6Completed = currentStepIndex === 5 && !isAnimating;
+                
+                // Ignore if animating (unless it's a looping step OR step 7 is completed OR step 6 just completed)
+                // Allow clicks after step 6/7 completes even if animation flag is still set
+                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep7Completed && !isStep6Completed) {
                     
                     return;
                 }
@@ -1640,6 +1689,9 @@
                         // Step 7 completed but no AR (or desktop) - redirect to recipe page
                         window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
                     }
+                } else if (isStep6Completed) {
+                    // Step 6 completed - advance to Step 7
+                    playNextStep();
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
                     // Advance to next step
                     playNextStep();
