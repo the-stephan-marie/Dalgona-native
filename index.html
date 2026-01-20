@@ -76,25 +76,9 @@
             opacity: 0; 
         }
 
-        /* Custom AR Button Styling */
+        /* Custom AR Button Styling - HIDDEN */
         #ar-button {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: #007AFF;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            z-index: 200;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        #ar-button:hover {
-            background: #0056CC;
+            display: none !important;
         }
 
         /* AR Recipe Link - Bottom Overlay */
@@ -219,7 +203,7 @@
         ar
         ar-modes="webxr scene-viewer quick-look"
         link="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona"
-        title="NESCAFÉ® 3in1 Dalgona Recipe"
+        title="Discover 30 days of Nescafe recipes this Ramadan."
         camera-controls
         disable-tap
         shadow-intensity="1.2"
@@ -228,14 +212,12 @@
         animation-name="animation_0"
         autoplay="true">
         
-        <button slot="ar-button" id="ar-button">
-            View in your space
-        </button>
+        <!-- AR button removed - will be shown in card after step 6 -->
         
         <!-- AR Recipe Card - WebXR DOM Overlay (styled via ar-status) -->
         <div id="ar-recipe-card">
             <div class="ar-recipe-content">
-                <p class="ar-recipe-description">How to make NESCAFÉ® 3in1 in Dalgona Coffee Recipe</p>
+                <p class="ar-recipe-description">Discover 30 days of Nescafe recipes this Ramadan.</p>
                 <a href="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona" 
                    class="ar-recipe-url" 
                    target="_blank" 
@@ -455,8 +437,8 @@
             // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
             iosBanner: {
                 callToAction: 'Visit Recipe',
-                checkoutTitle: 'NESCAFÉ® 3in1 Dalgona',
-                checkoutSubtitle: 'How to make Dalgona Coffee Recipe',
+                checkoutTitle: 'NESCAFÉ® 3in1 in Dalgona Coffee',
+                checkoutSubtitle: 'Discover 30 days of Nescafe recipes this Ramadan.',
                 canonicalWebPageURL: 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona'
             },
             
@@ -469,39 +451,47 @@
             // Keyframe spans for each step
             steps: [
                 { 
-                    startFrame: 1,
-                    endFrame: 80,
-                    title: 'Step 1: The Mix', 
-                    desc: 'Nescafé + Water into bowl',
+                    startFrame: 0,
+                    endFrame: 50,
+                    title: 'Step 1', 
+                    desc: 'Adding 3-in-1 Nescafe sachet',
                     objectHint: 'Tap the Nescafé sachet, pot, or handle'
                 },
                 { 
-                    startFrame: 80,
+                    startFrame: 50,
                     endFrame: 140,
-                    title: 'Step 2: Whip It', 
-                    desc: 'Whisking into foam...',
+                    title: 'Step 2', 
+                    desc: 'Adding 1 tbsp. water and mix',
                     objectHint: 'Tap the whisk'
                 },
                 { 
                     startFrame: 140,
                     endFrame: 200,
-                    title: 'Step 3: The Base', 
-                    desc: 'Milk into mug...',
+                    title: 'Step 3', 
+                    desc: 'Adding milk',
                     objectHint: 'Tap the jug'
                 },
                 { 
                     startFrame: 200,
                     endFrame: 240,
-                    title: 'Step 4: Transfer', 
-                    desc: 'Bowl into mug...',
+                    title: 'Step 4', 
+                    desc: 'Adding coffee mix from step 1 and 2',
                     objectHint: 'Tap the mixing bowl'
                 },
                 { 
                     startFrame: 240,
                     endFrame: 300,
-                    title: 'Step 5: Final Touch', 
-                    desc: 'Add ice...',
+                    title: 'Step 5', 
+                    desc: 'Adding ice cubes',
                     objectHint: 'Tap the scoop or ice bowl',
+                    loop: false
+                },
+                { 
+                    startFrame: 300,
+                    endFrame: 360,
+                    title: 'Step 6', 
+                    desc: 'Final look of Dalgona coffee',
+                    objectHint: 'Tap to view in AR',
                     loop: false
                 }
             ],
@@ -616,8 +606,8 @@
         
         // Initialize after model loads
         viewer.addEventListener('load', () => {
-            // Set initial time to frame 1
-            viewer.currentTime = frameToTime(1);
+            // Set initial time to frame 0
+            viewer.currentTime = frameToTime(0);
             viewer.pause();
             
             // Access hierarchy and build mappings
@@ -925,6 +915,9 @@
                         // Finished
                         if (currentStepIndex < CONFIG.steps.length - 1) {
                             descText.innerText = 'Tap to continue';
+                        } else {
+                            // Last step completed - show AR prompt
+                            descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
                         }
                     }
                 } else {
@@ -1201,8 +1194,8 @@
                     // The animation state might carry over when Quick Look opens
                     try {
                         // Set to play the full animation range (all steps)
-                        const firstFrame = CONFIG.steps[0].startFrame;
-                        const lastFrame = CONFIG.steps[CONFIG.steps.length - 1].endFrame;
+                        const firstFrame = CONFIG.steps[0].startFrame; // Should be 0
+                        const lastFrame = CONFIG.steps[CONFIG.steps.length - 1].endFrame; // Should be 360
                         const startTime = frameToTime(firstFrame);
                         const endTime = frameToTime(lastFrame);
                         
@@ -1231,7 +1224,7 @@
                     // Enable autoplay for AR mode
                     viewer.autoplay = true;
                     viewer.loop = false;
-                    viewer.currentTime = frameToTime(1);
+                    viewer.currentTime = frameToTime(0);
                     viewer.play();
                     
                     // Start auto-play in AR mode
@@ -1252,7 +1245,7 @@
                     // Enable autoplay for AR mode
                     viewer.autoplay = true;
                     viewer.loop = false;
-                    viewer.currentTime = frameToTime(1);
+                    viewer.currentTime = frameToTime(0);
                     viewer.play();
                     
                     // Start auto-play in AR mode (may work depending on Android version)
@@ -1612,10 +1605,14 @@
                     return;
                 }
                 
-                console.log('🎬 Welcome card clicked - triggering next animation step');
+                console.log('🎬 Welcome card clicked');
                 
-                // Check if we're at the start or need to advance
-                if (currentStepIndex < CONFIG.steps.length - 1) {
+                // Check if step 6 is completed - if so, launch AR
+                if (currentStepIndex === CONFIG.steps.length - 1 && !isAnimating) {
+                    // Step 6 completed - launch AR with compressed model
+                    console.log('🚀 Launching AR with compressed model');
+                    launchARWithCompressedModel();
+                } else if (currentStepIndex < CONFIG.steps.length - 1) {
                     // Advance to next step
                     playNextStep();
                 } else {
@@ -1660,13 +1657,83 @@
         // PLAYBACK FUNCTIONS
         // ============================================
 
+        // Function to launch AR with compressed model
+        function launchARWithCompressedModel() {
+            console.log('🚀 Launching AR with compressed model:', CONFIG.arModelPath);
+            
+            // Switch to compressed model for AR
+            if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
+                const previousSrc = viewer.src;
+                viewer.src = CONFIG.arModelPath;
+                console.log('✅ Switched to compressed model for AR');
+                
+                // Wait for model to load, then activate AR
+                const activateARAfterLoad = () => {
+                    viewer.removeEventListener('load', activateARAfterLoad);
+                    activateAR();
+                };
+                
+                viewer.addEventListener('load', activateARAfterLoad, { once: true });
+            } else {
+                // Model already set, activate AR immediately
+                activateAR();
+            }
+            
+            function activateAR() {
+                // Create a temporary AR button and trigger it
+                // This is the most reliable way to activate AR in model-viewer
+                const tempButton = document.createElement('button');
+                tempButton.slot = 'ar-button';
+                tempButton.style.cssText = 'display: none; position: absolute; opacity: 0; pointer-events: none;';
+                tempButton.setAttribute('aria-label', 'Launch AR');
+                viewer.appendChild(tempButton);
+                
+                // Wait a moment for button to be registered, then trigger click
+                setTimeout(() => {
+                    try {
+                        // Try multiple methods to trigger AR
+                        if (tempButton.click) {
+                            tempButton.click();
+                        } else if (tempButton.dispatchEvent) {
+                            const clickEvent = new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            });
+                            tempButton.dispatchEvent(clickEvent);
+                        }
+                        console.log('✅ AR button triggered');
+                    } catch (error) {
+                        console.error('❌ Error triggering AR:', error);
+                        // Fallback: show message to user
+                        descText.innerText = 'Please use your browser\'s AR button to view in AR';
+                    } finally {
+                        // Clean up after a delay
+                        setTimeout(() => {
+                            if (tempButton.parentNode) {
+                                tempButton.remove();
+                            }
+                        }, 1000);
+                    }
+                }, 200);
+            }
+        }
+
         function playNextStep() {
             currentStepIndex++;
             const stepData = CONFIG.steps[currentStepIndex];
 
+            // Check if this is the last step (step 6)
+            const isLastStep = currentStepIndex === CONFIG.steps.length - 1;
+
             // Update UI
             titleText.innerText = stepData.title;
-            descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
+            if (isLastStep) {
+                // After step 6, change button text to AR prompt
+                descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
+            } else {
+                descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
+            }
             isAnimating = true;
 
             // Play the keyframe range
@@ -1699,7 +1766,7 @@
             
             // Reset to beginning
             currentStepIndex = -1;
-            viewer.currentTime = frameToTime(1);
+            viewer.currentTime = frameToTime(0);
             viewer.pause();
             isAnimating = false;
 
@@ -1711,7 +1778,7 @@
                     isAutoPlaying = false;
                     const lastStep = CONFIG.steps[CONFIG.steps.length - 1];
                     titleText.innerText = lastStep.title;
-                    descText.innerText = 'Animation complete!';
+                    descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
                     
                     // Recipe link doesn't need reset (it's just a link)
                     return;
@@ -1725,7 +1792,12 @@
 
                 // Update UI
                 titleText.innerText = stepData.title;
-                descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
+                const isLastStep = currentStepIndex === CONFIG.steps.length - 1;
+                if (isLastStep) {
+                    descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
+                } else {
+                    descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
+                }
                 isAnimating = true;
 
                 // Play the keyframe range
