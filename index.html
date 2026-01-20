@@ -12,15 +12,94 @@
             margin: 0; 
             padding: 0; 
             font-family: 'Helvetica', 'Arial', sans-serif; 
-            overflow: hidden; 
+            overflow: hidden;
+            background-image: url('assets/bg.png');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }
+        
+        /* Header Section */
+        #header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 200;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        #logo {
+            max-width: 180px;
+            width: 100%;
+            height: auto;
+            margin-bottom: 6px;
+            display: block;
+            object-fit: contain;
+        }
+        
+        #recipe-name {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 13px;
+            font-weight: 400;
+            color: #333;
+            text-align: center;
+            margin: 0;
+            line-height: 1.3;
+            padding: 0 8px;
+        }
+        
+        /* Mobile Responsive Header */
+        @media (max-width: 480px) {
+            #header {
+                padding: 10px 12px;
+            }
+            
+            #logo {
+                max-width: 150px;
+                margin-bottom: 5px;
+            }
+            
+            #recipe-name {
+                font-size: 11px;
+                padding: 0 4px;
+            }
+        }
+        
+        @media (min-width: 481px) and (max-width: 768px) {
+            #logo {
+                max-width: 160px;
+            }
+            
+            #recipe-name {
+                font-size: 12px;
+            }
         }
         
         /* The AR Window */
         model-viewer {
             width: 100vw;
             height: 100vh;
-            background-color: #f5f5f5; /* Fallback color */
-            --poster-color: #f5f5f5;
+            background-color: transparent;
+            --poster-color: transparent;
+            margin-top: 0;
+            position: relative;
+        }
+        
+        /* Adjust model-viewer to account for header */
+        #ar-viewer {
+            margin-top: 0;
         }
 
         /* The UI Overlay Container */
@@ -147,6 +226,12 @@
             display: flex;
         }
 
+        /* Show AR recipe card in 3D viewer mode when AR is not available (after step 6) */
+        #ar-recipe-card.show-in-viewer {
+            display: flex;
+            z-index: 101; /* Above welcome card (z-index: 100) */
+        }
+
         .ar-recipe-content {
             flex: 1;
             display: flex;
@@ -196,6 +281,12 @@
     </style>
 </head>
 <body>
+
+    <!-- Header Section -->
+    <header id="header">
+        <img id="logo" src="assets/NESCAFÉ-NEW-PACKAGING_logo_white 4.png" alt="NESCAFÉ Logo">
+        <h1 id="recipe-name">NESCAFÉ® 3in1 in Dalgona Coffee Recipe</h1>
+    </header>
 
     <model-viewer 
         id="ar-viewer"
@@ -455,28 +546,32 @@
                     endFrame: 50,
                     title: 'Step 1', 
                     desc: 'Adding 3-in-1 Nescafe sachet',
-                    objectHint: 'Tap the Nescafé sachet, pot, or handle'
+                    objectHint: 'Tap the Nescafé sachet, pot, or handle',
+                    nextPrompt: 'Add 1 tbsp. water and mix'
                 },
                 { 
                     startFrame: 50,
                     endFrame: 140,
                     title: 'Step 2', 
                     desc: 'Adding 1 tbsp. water and mix',
-                    objectHint: 'Tap the whisk'
+                    objectHint: 'Tap the whisk',
+                    nextPrompt: 'Add milk to the mug'
                 },
                 { 
                     startFrame: 140,
                     endFrame: 200,
                     title: 'Step 3', 
                     desc: 'Adding milk',
-                    objectHint: 'Tap the jug'
+                    objectHint: 'Tap the jug',
+                    nextPrompt: 'Add the coffee mixture into mug'
                 },
                 { 
                     startFrame: 200,
                     endFrame: 240,
                     title: 'Step 4', 
                     desc: 'Adding coffee mix from step 1 and 2',
-                    objectHint: 'Tap the mixing bowl'
+                    objectHint: 'Tap the mixing bowl',
+                    nextPrompt: 'Add ice cubes'
                 },
                 { 
                     startFrame: 240,
@@ -484,6 +579,7 @@
                     title: 'Step 5', 
                     desc: 'Adding ice cubes',
                     objectHint: 'Tap the scoop or ice bowl',
+                    nextPrompt: 'View the final Dalgona coffee',
                     loop: false
                 },
                 { 
@@ -508,7 +604,7 @@
             
             // Welcome message
             welcomeTitle: 'Welcome',
-            welcomeDesc: 'Tap here to start!',
+            welcomeDesc: 'Tap to add the Nescafe sachet to a bowl',
             
             // Continue prompt
             continuePrompt: 'Tap the correct object to continue ->',
@@ -914,10 +1010,16 @@
                     } else {
                         // Finished
                         if (currentStepIndex < CONFIG.steps.length - 1) {
-                            descText.innerText = 'Tap to continue';
+                            // Show next step's prompt
+                            const nextStep = CONFIG.steps[currentStepIndex + 1];
+                            if (nextStep && nextStep.nextPrompt) {
+                                descText.innerText = nextStep.nextPrompt;
+                            } else {
+                                descText.innerText = 'Tap to continue';
+                            }
                         } else {
-                            // Last step completed - show AR prompt
-                            descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
+                            // Last step completed - handle based on AR capability
+                            handleStep6Completion();
                         }
                     }
                 } else {
@@ -994,6 +1096,9 @@
         let currentARMode = null;
         let isInQuickLook = false;
         
+        // Get header element
+        const header = document.querySelector('#header');
+        
         // Listen for AR status changes with detailed logging
         viewer.addEventListener('ar-status', (event) => {
             const status = event.detail.status;
@@ -1003,6 +1108,15 @@
             console.log('AR status:', status);
             console.log('AR mode:', mode);
             console.log('AR status detail:', event.detail);
+            
+            // Hide header when AR is active, show when not
+            if (header) {
+                if (status === 'presenting' || status === 'session-started' || status === 'object-placed') {
+                    header.style.display = 'none';
+                } else if (status === 'not-presenting') {
+                    header.style.display = 'flex';
+                }
+            }
             
             if (status === 'failed') {
                 console.error('=== AR INITIALIZATION FAILED ===');
@@ -1329,13 +1443,14 @@
                 }
                 
                 // Log AR capabilities
+                let mobileWebXRSupported = false;
                 if (isMobile) {
                     console.log('Mobile device detected');
                     console.log('AR available:', viewer.arAvailable);
                     console.log('AR supported:', viewer.arSupported);
                     
                     // Check WebXR support on mobile too (for Android)
-                    const mobileWebXRSupported = await checkWebXRSupport();
+                    mobileWebXRSupported = await checkWebXRSupport();
                     console.log('WebXR support on mobile:', mobileWebXRSupported);
                     
                     if (mobileWebXRSupported) {
@@ -1367,6 +1482,11 @@
                         console.log('✅ AR should work on this desktop browser');
                     }
                 }
+                
+                // Store AR capability status globally
+                // AR is available if: model-viewer reports it, OR WebXR is supported, OR mobile has AR/WebXR
+                hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported));
+                console.log('📱 AR Capability Status:', hasARCapability);
             }, 2000); // Increased timeout to allow WebXR to initialize
         });
 
@@ -1376,6 +1496,7 @@
         
         let currentStepIndex = -1; // Starts before the first step
         let isAnimating = false;
+        let hasARCapability = false; // Track if device supports AR
 
         // ============================================
         // EVENT HANDLERS
@@ -1538,9 +1659,18 @@
                 console.log('❌ No node hit at coordinates:', { clientX, clientY });
             }
             
+            // Helper function to get next step prompt
+            function getNextStepPrompt() {
+                if (currentStepIndex < CONFIG.steps.length - 1) {
+                    const nextStep = CONFIG.steps[currentStepIndex + 1];
+                    return nextStep && nextStep.nextPrompt ? nextStep.nextPrompt : 'Tap to continue';
+                }
+                return 'Tap to continue';
+            }
+            
             if (!nodeName) {
-                // Clicked on empty space - show feedback
-                descText.innerText = 'Tap to continue';
+                // Clicked on empty space - show next step prompt
+                descText.innerText = getNextStepPrompt();
                 return;
             }
             
@@ -1551,7 +1681,7 @@
             if (objectStepIndex === -1) {
                 // Clicked node is not interactive
                 console.log('Node is not in interactive objects list:', nodeName);
-                descText.innerText = 'Tap to continue';
+                descText.innerText = getNextStepPrompt();
                 return;
             }
             
@@ -1565,11 +1695,11 @@
             } else if (objectStepIndex < expectedStepIndex) {
                 // Clicked an object from a previous step
                 console.log('⚠️ Clicked previous step object');
-                descText.innerText = 'Tap to continue';
+                descText.innerText = getNextStepPrompt();
             } else {
                 // Clicked an object from a future step
                 console.log('⚠️ Clicked future step object');
-                descText.innerText = 'Tap to continue';
+                descText.innerText = getNextStepPrompt();
             }
         });
         
@@ -1599,28 +1729,29 @@
                     return;
                 }
                 
-                // Allow clicks after step 5 (index 4) to enter AR, even if animation is finishing
-                // Step 5 is index 4 (0-indexed: Step 1=0, Step 2=1, Step 3=2, Step 4=3, Step 5=4, Step 6=5)
-                const isStep5OrLater = currentStepIndex >= 4; // Step 5 (index 4) or Step 6 (index 5)
+                // Check if step 6 is completed
+                const isStep6Completed = currentStepIndex === CONFIG.steps.length - 1;
                 
-                // Ignore if animating (unless it's a looping step OR we're at step 5 or later)
-                // This allows users to click after step 5 completes to enter AR mode
-                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep5OrLater) {
+                // Ignore if animating (unless it's a looping step OR step 6 is completed)
+                // Allow clicks after step 6 completes even if animation flag is still set
+                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep6Completed) {
                     console.log('Card click ignored - animation in progress');
                     return;
                 }
                 
                 console.log('🎬 Welcome card clicked');
                 
-                // Check if step 5 is completed (index 4) - allow entering AR after step 5
-                if (currentStepIndex === 4) {
-                    // Step 5 completed - launch AR with compressed model
-                    console.log('🚀 Step 5 completed - launching AR with compressed model');
-                    launchARWithCompressedModel();
-                } else if (currentStepIndex === CONFIG.steps.length - 1) {
-                    // Step 6 completed - launch AR with compressed model
-                    console.log('🚀 Step 6 completed - launching AR with compressed model');
-                    launchARWithCompressedModel();
+                // Check if step 6 is completed - if so, launch AR (only if device has AR capability)
+                if (isStep6Completed) {
+                    if (hasARCapability) {
+                        // Step 6 completed and device has AR - launch AR with compressed model
+                        console.log('🚀 Step 6 completed - launching AR with compressed model');
+                        launchARWithCompressedModel();
+                    } else {
+                        // Step 6 completed but no AR - recipe card should already be showing
+                        console.log('⚠️ Step 6 completed but device has no AR capability');
+                        console.log('💡 Recipe card should be visible for user to tap');
+                    }
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
                     // Advance to next step
                     playNextStep();
@@ -1737,16 +1868,54 @@
 
             // Update UI
             titleText.innerText = stepData.title;
-            if (isLastStep) {
-                // After step 6, change button text to AR prompt
-                descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
-            } else {
-                descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
+            if (!isLastStep) {
+                // Show next step's prompt
+                const nextStep = CONFIG.steps[currentStepIndex + 1];
+                if (nextStep && nextStep.nextPrompt) {
+                    descText.innerText = nextStep.nextPrompt;
+                } else {
+                    descText.innerText = 'Tap to continue';
+                }
             }
+            // Note: Last step completion is handled by handleStep6Completion() in playKeyframeRange
             isAnimating = true;
 
             // Play the keyframe range
             playKeyframeRange(stepData);
+        }
+
+        // Function to handle step 6 completion based on AR capability
+        function handleStep6Completion() {
+            console.log('🎉 Step 6 completed. AR capability:', hasARCapability);
+            
+            if (hasARCapability) {
+                // Device has AR - show welcome card with AR prompt
+                console.log('✅ Device has AR capability - showing AR prompt');
+                titleText.innerText = 'Step 6';
+                descText.innerText = "Tap to view NESCAFÉ's Dalgona Coffee in your space";
+                // Ensure welcome card is visible
+                if (card) {
+                    card.style.display = 'inline-block';
+                }
+                // Hide AR recipe card if it was shown
+                const arRecipeCard = document.querySelector('#ar-recipe-card');
+                if (arRecipeCard) {
+                    arRecipeCard.classList.remove('show-in-viewer');
+                }
+            } else {
+                // Device doesn't have AR - show recipe card instead
+                console.log('❌ Device does not have AR capability - showing recipe card');
+                // Hide welcome card
+                if (card) {
+                    card.style.display = 'none';
+                }
+                // Show AR recipe card in viewer mode
+                const arRecipeCard = document.querySelector('#ar-recipe-card');
+                if (arRecipeCard) {
+                    arRecipeCard.classList.add('show-in-viewer');
+                    console.log('✅ Recipe card shown for non-AR devices');
+                }
+            }
         }
 
         function resetExperience() {
@@ -1755,9 +1924,18 @@
             descText.innerText = CONFIG.resetDesc;
             
             // Reset to first frame
-            viewer.currentTime = frameToTime(1);
+            viewer.currentTime = frameToTime(0);
             viewer.pause();
             isAnimating = false;
+            
+            // Reset UI cards
+            if (card) {
+                card.style.display = 'inline-block';
+            }
+            const arRecipeCard = document.querySelector('#ar-recipe-card');
+            if (arRecipeCard) {
+                arRecipeCard.classList.remove('show-in-viewer');
+            }
         }
 
         // Auto-play all steps in sequence (for AR mode)
@@ -1787,7 +1965,8 @@
                     isAutoPlaying = false;
                     const lastStep = CONFIG.steps[CONFIG.steps.length - 1];
                     titleText.innerText = lastStep.title;
-                    descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
+                    // Handle step 6 completion based on AR capability
+                    handleStep6Completion();
                     
                     // Recipe link doesn't need reset (it's just a link)
                     return;
@@ -1802,11 +1981,16 @@
                 // Update UI
                 titleText.innerText = stepData.title;
                 const isLastStep = currentStepIndex === CONFIG.steps.length - 1;
-                if (isLastStep) {
-                    descText.innerText = "View NESCAFÉ's Dalgona Coffee in your space";
-                } else {
-                    descText.innerText = 'Tap to continue'; // Always show this since raycasting is buggy
+                if (!isLastStep) {
+                    // Show next step's prompt
+                    const nextStep = CONFIG.steps[currentStepIndex + 1];
+                    if (nextStep && nextStep.nextPrompt) {
+                        descText.innerText = nextStep.nextPrompt;
+                    } else {
+                        descText.innerText = 'Tap to continue';
+                    }
                 }
+                // Note: Last step completion is handled by handleStep6Completion() in checkAutoPlayback
                 isAnimating = true;
 
                 // Play the keyframe range
