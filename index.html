@@ -20,18 +20,15 @@
             background-attachment: fixed;
         }
         
-        /* Header Section */
+        /* Header Section - Completely Transparent */
         #header {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             z-index: 200;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            padding: 12px 16px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            background: transparent;
+            padding: 16px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -41,49 +38,63 @@
         }
         
         #logo {
-            max-width: 180px;
-            width: 100%;
+            max-width: 85%;
+            width: auto;
             height: auto;
-            margin-bottom: 6px;
             display: block;
             object-fit: contain;
         }
         
+        /* Recipe Name - Below Header */
         #recipe-name {
+            position: fixed;
+            top: 80px;
+            left: 0;
+            right: 0;
+            z-index: 200;
             font-family: 'Helvetica', 'Arial', sans-serif;
-            font-size: 13px;
-            font-weight: 400;
-            color: #333;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffffff;
             text-align: center;
             margin: 0;
             line-height: 1.3;
-            padding: 0 8px;
+            padding: 0 20px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         }
         
         /* Mobile Responsive Header */
         @media (max-width: 480px) {
             #header {
-                padding: 10px 12px;
+                padding: 12px 16px;
             }
             
             #logo {
-                max-width: 150px;
-                margin-bottom: 5px;
+                max-width: 80%;
             }
             
             #recipe-name {
-                font-size: 11px;
-                padding: 0 4px;
+                top: 70px;
+                font-size: 16px;
+                padding: 0 16px;
             }
         }
         
         @media (min-width: 481px) and (max-width: 768px) {
             #logo {
-                max-width: 160px;
+                max-width: 82%;
             }
             
             #recipe-name {
-                font-size: 12px;
+                top: 75px;
+                font-size: 17px;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            #recipe-name {
+                top: 90px;
+                font-size: 20px;
             }
         }
         
@@ -285,8 +296,10 @@
     <!-- Header Section -->
     <header id="header">
         <img id="logo" src="assets/NESCAFÉ-NEW-PACKAGING_logo_white 4.png" alt="NESCAFÉ Logo">
-        <h1 id="recipe-name">NESCAFÉ® 3in1 in Dalgona Coffee Recipe</h1>
     </header>
+    
+    <!-- Recipe Name - Below Header -->
+    <h1 id="recipe-name">NESCAFÉ® 3in1 in Dalgona Coffee Recipe</h1>
 
     <model-viewer 
         id="ar-viewer"
@@ -327,188 +340,13 @@
 
     <div id="ui-layer">
         <div class="card" id="info-card">
-            <h2 id="step-title">Welcome</h2>
-            <p id="step-desc">Tap the Nescafé sachet to start!</p>
+            <h2 id="step-title">TAP TO BEGIN</h2>
+            <p id="step-desc">Empty your NESCAFÉ® 3in1 sachet into a bowl.</p>
         </div>
     </div>
 
 
     <script type="module">
-        // ============================================
-        // ON-SCREEN CONSOLE FOR MOBILE DEBUGGING
-        // ============================================
-        
-        function createOnScreenConsole() {
-            const consoleDiv = document.createElement('div');
-            consoleDiv.id = 'mobile-console';
-            consoleDiv.style.cssText = `
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                max-height: 200px;
-                overflow-y: auto;
-                background: rgba(0, 0, 0, 0.95);
-                color: #0f0;
-                font-family: 'Courier New', monospace;
-                font-size: 11px;
-                padding: 8px;
-                z-index: 10000;
-                display: none;
-                border-top: 2px solid #0f0;
-                box-shadow: 0 -2px 10px rgba(0, 255, 0, 0.3);
-            `;
-            
-            // Add close button
-            const closeBtn = document.createElement('button');
-            closeBtn.textContent = '✕';
-            closeBtn.style.cssText = `
-                position: absolute;
-                top: 5px;
-                right: 5px;
-                background: #f00;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                width: 24px;
-                height: 24px;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: bold;
-                z-index: 10001;
-            `;
-            closeBtn.onclick = () => {
-                consoleDiv.style.display = 'none';
-            };
-            consoleDiv.appendChild(closeBtn);
-            
-            // Add clear button
-            const clearBtn = document.createElement('button');
-            clearBtn.textContent = 'Clear';
-            clearBtn.style.cssText = `
-                position: absolute;
-                top: 5px;
-                right: 35px;
-                background: #333;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                padding: 2px 8px;
-                cursor: pointer;
-                font-size: 10px;
-                z-index: 10001;
-            `;
-            clearBtn.onclick = () => {
-                const logs = consoleDiv.querySelectorAll('div:not(button)');
-                logs.forEach(log => log.remove());
-            };
-            consoleDiv.appendChild(clearBtn);
-            
-            document.body.appendChild(consoleDiv);
-            
-            // Store original console methods
-            const originalLog = console.log;
-            const originalError = console.error;
-            const originalWarn = console.warn;
-            const originalInfo = console.info;
-            
-            function addToScreen(type, ...args) {
-                const consoleDiv = document.getElementById('mobile-console');
-                if (!consoleDiv) return;
-                
-                const message = args.map(arg => {
-                    if (arg === null) return 'null';
-                    if (arg === undefined) return 'undefined';
-                    if (typeof arg === 'object') {
-                        try {
-                            return JSON.stringify(arg, null, 2);
-                        } catch (e) {
-                            return String(arg);
-                        }
-                    }
-                    return String(arg);
-                }).join(' ');
-                
-                const logEntry = document.createElement('div');
-                logEntry.style.cssText = `
-                    padding: 3px 0;
-                    border-bottom: 1px solid #222;
-                    word-wrap: break-word;
-                    color: ${type === 'error' ? '#ff4444' : type === 'warn' ? '#ffaa00' : type === 'info' ? '#00aaff' : '#00ff00'};
-                    white-space: pre-wrap;
-                `;
-                
-                const timestamp = new Date().toLocaleTimeString();
-                logEntry.textContent = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
-                consoleDiv.appendChild(logEntry);
-                consoleDiv.scrollTop = consoleDiv.scrollHeight;
-                
-                // Auto-show console for errors and warnings
-                if (type === 'error' || type === 'warn') {
-                    consoleDiv.style.display = 'block';
-                }
-            }
-            
-            // Override console methods
-            console.log = function(...args) {
-                originalLog.apply(console, args);
-                addToScreen('log', ...args);
-            };
-            
-            console.error = function(...args) {
-                originalError.apply(console, args);
-                addToScreen('error', ...args);
-            };
-            
-            console.warn = function(...args) {
-                originalWarn.apply(console, args);
-                addToScreen('warn', ...args);
-            };
-            
-            console.info = function(...args) {
-                if (originalInfo) originalInfo.apply(console, args);
-                addToScreen('info', ...args);
-            };
-            
-            // Toggle console with triple tap
-            let tapCount = 0;
-            let tapTimer = null;
-            document.addEventListener('touchstart', (e) => {
-                // Don't trigger on UI elements
-                if (e.target.tagName === 'BUTTON' || e.target.closest('#ui-layer')) {
-                    return;
-                }
-                
-                tapCount++;
-                clearTimeout(tapTimer);
-                tapTimer = setTimeout(() => {
-                    if (tapCount === 3) {
-                        const consoleDiv = document.getElementById('mobile-console');
-                        if (consoleDiv) {
-                            consoleDiv.style.display = consoleDiv.style.display === 'none' ? 'block' : 'none';
-                        }
-                    }
-                    tapCount = 0;
-                }, 400);
-            });
-            
-            // Also allow keyboard toggle (for desktop testing)
-            document.addEventListener('keydown', (e) => {
-                if (e.key === '`' && e.ctrlKey) {
-                    e.preventDefault();
-                    const consoleDiv = document.getElementById('mobile-console');
-                    if (consoleDiv) {
-                        consoleDiv.style.display = consoleDiv.style.display === 'none' ? 'block' : 'none';
-                    }
-                }
-            });
-            
-            console.log('On-screen console initialized. Triple-tap to toggle, or press Ctrl+`');
-        }
-        
-        // Initialize console immediately
-        createOnScreenConsole();
-        
         // ============================================
         // CONFIGURATION: Keyframe-based animation with object-specific taps
         // ============================================
@@ -544,49 +382,48 @@
                 { 
                     startFrame: 0,
                     endFrame: 50,
-                    title: 'Step 1', 
-                    desc: 'Adding 3-in-1 Nescafe sachet',
+                    title: 'STEP 1', 
+                    desc: 'Add 1 tablespoon of hot water and mix.',
                     objectHint: 'Tap the Nescafé sachet, pot, or handle',
-                    nextPrompt: 'Add 1 tbsp. water and mix'
+                    nextPrompt: 'STEP 2: Add 1 tablespoon of hot water and mix.'
                 },
                 { 
                     startFrame: 50,
                     endFrame: 140,
-                    title: 'Step 2', 
-                    desc: 'Adding 1 tbsp. water and mix',
+                    title: 'STEP 2', 
+                    desc: 'Add 1 tablespoon of hot water and mix.',
                     objectHint: 'Tap the whisk',
-                    nextPrompt: 'Add milk to the mug'
+                    nextPrompt: 'STEP 3: Pour some milk into your cup.'
                 },
                 { 
                     startFrame: 140,
                     endFrame: 200,
-                    title: 'Step 3', 
-                    desc: 'Adding milk',
+                    title: 'STEP 3', 
+                    desc: 'Pour some milk into your cup.',
                     objectHint: 'Tap the jug',
-                    nextPrompt: 'Add the coffee mixture into mug'
+                    nextPrompt: 'STEP 4: Pour the coffee mixture into your cup of milk.'
                 },
                 { 
                     startFrame: 200,
                     endFrame: 240,
-                    title: 'Step 4', 
-                    desc: 'Adding coffee mix from step 1 and 2',
+                    title: 'STEP 4', 
+                    desc: 'Pour the coffee mixture into your cup of milk.',
                     objectHint: 'Tap the mixing bowl',
-                    nextPrompt: 'Add ice cubes'
+                    nextPrompt: 'STEP 5: Add some ice cubes.'
                 },
                 { 
                     startFrame: 240,
                     endFrame: 300,
-                    title: 'Step 5', 
-                    desc: 'Adding ice cubes',
+                    title: 'STEP 5', 
+                    desc: 'Add some ice cubes.',
                     objectHint: 'Tap the scoop or ice bowl',
-                    nextPrompt: 'View the final Dalgona coffee',
                     loop: false
                 },
                 { 
                     startFrame: 300,
                     endFrame: 360,
-                    title: 'Step 6', 
-                    desc: 'Final look of Dalgona coffee',
+                    title: 'Enjoy your NESCAFÉ® 3in1 Dalgona Coffee Cup', 
+                    desc: 'Tap to see view it in your space',
                     objectHint: 'Tap to view in AR',
                     loop: false
                 }
@@ -603,8 +440,8 @@
             ],
             
             // Welcome message
-            welcomeTitle: 'Welcome',
-            welcomeDesc: 'Tap to add the Nescafe sachet to a bowl',
+            welcomeTitle: 'TAP TO BEGIN',
+            welcomeDesc: 'Empty your NESCAFÉ® 3in1 sachet into a bowl.',
             
             // Continue prompt
             continuePrompt: 'Tap the correct object to continue ->',
@@ -670,14 +507,14 @@
                     iosUrl = `${iosUrl}#${params.join('&')}`;
                 }
                 
-                console.log('✅ iOS Quick Look banner configured');
-                console.log('Banner parameters:', banner);
+                
+                
             }
             
             viewer.setAttribute('ios-src', iosUrl);
-            console.log('✅ USDZ file configured for iOS Quick Look:', CONFIG.iosModelPath);
-            console.log('📱 Quick Look will use USDZ file with banner support');
-            console.log('iOS URL with banner:', iosUrl);
+            
+            
+            
         } else {
             console.log('⚠️ No USDZ file specified - iOS will use GLB (may have limitations)');
         }
@@ -712,7 +549,7 @@
         
         // Also listen for scene-graph-ready event
         viewer.addEventListener('scene-graph-ready', () => {
-            console.log('Scene graph ready');
+            
             setupHitDetection();
         });
         
@@ -724,9 +561,9 @@
             
             // Wait for model to load
             if (!viewer.loaded) {
-                console.log('Model not loaded yet, waiting...');
+                
                 viewer.addEventListener('load', () => {
-                    console.log('Model loaded, retrying hit detection setup...');
+                    
                     setupHitDetection();
                 }, { once: true });
                 return;
@@ -734,18 +571,18 @@
             
             // Import Three.js for raycasting
             if (!window.THREE) {
-                console.log('Three.js not found, importing...');
+                
                 import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js').then((THREE_Module) => {
                     window.THREE = THREE_Module;
                     THREE = THREE_Module;
-                    console.log('Three.js imported successfully');
+                    
                     initializeHitDetection();
                 }).catch((err) => {
                     console.error('Failed to import Three.js:', err);
                 });
             } else {
                 THREE = window.THREE;
-                console.log('Three.js already available');
+                
                 initializeHitDetection();
             }
         }
@@ -756,7 +593,7 @@
                 return;
             }
             
-            console.log('Initializing hit detection...');
+            
             
             // Access hierarchy from viewer.model
             const symbols = Object.getOwnPropertySymbols(viewer.model);
@@ -771,7 +608,7 @@
             const hierarchy = viewer.model[hierarchySym];
             hierarchyNodes = hierarchy.filter(node => node.mesh); // Only nodes with meshes
             
-            console.log('Found hierarchy nodes:', hierarchyNodes.length);
+            
             console.log('Node names:', hierarchyNodes.map(n => n.name).filter(Boolean));
             
             // Build flexible node-to-step mapping
@@ -798,13 +635,13 @@
                 if (canvas && canvas.__THREE__) {
                     window.modelViewerScene = canvas.__THREE__.scene;
                     window.modelViewerCamera = canvas.__THREE__.camera;
-                    console.log('Found model-viewer scene and camera');
+                    
                 } else {
-                    console.warn('Could not find model-viewer canvas or THREE context');
+                    
                 }
             }
             
-            console.log('✅ Hit detection initialized successfully!');
+            
         }
         
         function buildFlexibleNodeMapping(nodes) {
@@ -960,13 +797,13 @@
                 });
                 
                 if (hitNode) {
-                    console.log('✅ Matched to node:', hitNode.name);
+                    
                     return hitNode.name;
                 } else {
-                    console.warn('⚠️ Hit mesh not found in hierarchyNodes:', hitMesh.name);
+                    
                 }
             } else {
-                console.log('❌ No raycast intersections found');
+                
             }
             
             return null;
@@ -1010,12 +847,17 @@
                     } else {
                         // Finished
                         if (currentStepIndex < CONFIG.steps.length - 1) {
-                            // Show next step's prompt
+                            // Show next step's description
                             const nextStep = CONFIG.steps[currentStepIndex + 1];
-                            if (nextStep && nextStep.nextPrompt) {
-                                descText.innerText = nextStep.nextPrompt;
-                            } else {
-                                descText.innerText = 'Tap to continue';
+                            if (nextStep) {
+                                titleText.innerText = nextStep.title;
+                                descText.innerText = nextStep.desc;
+                            }
+                            
+                            // If step 4 (index 3) just completed, ensure AR capability is determined before step 5
+                            if (currentStepIndex === 3) {
+                                // AR capability should already be checked, but verify it's set
+                                // This ensures we know AR status before step 5 completes
                             }
                         } else {
                             // Last step completed - handle based on AR capability
@@ -1083,7 +925,7 @@
                 const supported = await navigator.xr.isSessionSupported('immersive-ar');
                 return supported;
             } catch (e) {
-                console.log('WebXR check failed:', e);
+                
                 return false;
             }
         }
@@ -1096,8 +938,9 @@
         let currentARMode = null;
         let isInQuickLook = false;
         
-        // Get header element
+        // Get header and recipe name elements
         const header = document.querySelector('#header');
+        const recipeName = document.querySelector('#recipe-name');
         
         // Listen for AR status changes with detailed logging
         viewer.addEventListener('ar-status', (event) => {
@@ -1105,30 +948,32 @@
             const mode = event.detail.mode;
             currentARMode = mode;
             
-            console.log('AR status:', status);
-            console.log('AR mode:', mode);
-            console.log('AR status detail:', event.detail);
             
-            // Hide header when AR is active, show when not
+            
+            
+            
+            // Hide header and recipe name when AR is active, show when not
             if (header) {
                 if (status === 'presenting' || status === 'session-started' || status === 'object-placed') {
                     header.style.display = 'none';
+                    if (recipeName) recipeName.style.display = 'none';
                 } else if (status === 'not-presenting') {
                     header.style.display = 'flex';
+                    if (recipeName) recipeName.style.display = 'block';
                 }
             }
             
             if (status === 'failed') {
                 console.error('=== AR INITIALIZATION FAILED ===');
-                console.log('Failed AR mode:', mode);
-                console.log('AR modes configured:', viewer.arModes);
-                console.log('AR available:', viewer.arAvailable);
-                console.log('AR supported:', viewer.arSupported);
-                console.log('Model loaded:', viewer.loaded);
-                console.log('Model source:', viewer.src);
-                console.log('iOS source:', viewer.iosSrc);
-                console.log('User agent:', navigator.userAgent);
-                console.log('Is HTTPS:', location.protocol === 'https:');
+                
+                
+                
+                
+                
+                
+                
+                
+                
                 
                 // Check for common issues
                 if (!viewer.loaded) {
@@ -1144,15 +989,15 @@
                     console.error('❌ AR requires HTTPS (except localhost)');
                 }
                 if (mode === 'quick-look' && !viewer.iosSrc) {
-                    console.warn('⚠️ Quick Look requires USDZ file for iOS');
+                    
                 }
                 if (mode === 'scene-viewer') {
-                    console.log('Scene Viewer failed - checking Android compatibility');
+                    
                     console.log('Android version check:', /Android/.test(navigator.userAgent));
                 }
-                console.log('=== END AR FAILURE DIAGNOSTICS ===');
+                
             } else if (status === 'session-started') {
-                console.log('✅ WebXR AR session started!');
+                
                 console.log('AR mode:', mode || 'webxr (inferred)');
                 
                 // Show AR recipe card for WebXR mode
@@ -1190,7 +1035,7 @@
                             arRecipeCard.style.padding = '16px 20px';
                             arRecipeCard.style.borderRadius = '10px';
                             arRecipeCard.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.2)';
-                            console.log('✅ AR recipe card styles applied');
+                            
                             console.log('Card dimensions after styling:', {
                                 clientHeight: arRecipeCard.clientHeight,
                                 clientWidth: arRecipeCard.clientWidth,
@@ -1203,13 +1048,13 @@
                             });
                         });
                     });
-                    console.log('✅ AR recipe card visibility enabled for WebXR session');
+                    
                     console.log('✅ WebXR mode supports HTML overlays (styled via ar-status)');
                 } else {
                     console.error('❌ AR recipe card element not found!');
                 }
             } else if (status === 'object-placed') {
-                console.log('✅ Object placed in AR!');
+                
                 console.log('AR mode:', mode || 'webxr (inferred)');
                 
                 // Ensure AR recipe card remains visible after object placement
@@ -1223,7 +1068,7 @@
                         arRecipeCard.style.zIndex = '99999';
                         arRecipeCard.style.visibility = 'visible';
                         arRecipeCard.style.opacity = '1';
-                        console.log('✅ AR recipe card visibility maintained after object placement');
+                        
                         console.log('Card dimensions:', {
                             clientHeight: arRecipeCard.clientHeight,
                             clientWidth: arRecipeCard.clientWidth,
@@ -1233,7 +1078,7 @@
                     }, 50);
                 }
             } else if (status === 'not-presenting') {
-                console.log('AR available but not active');
+                
                 isInQuickLook = false;
                 
                 // Stop auto-play when exiting AR mode
@@ -1241,7 +1086,7 @@
                 
                 // Switch back to original model when exiting AR mode
                 if (CONFIG.arModelPath && viewer.src !== CONFIG.modelPath) {
-                    console.log('🔄 Switching back to original model for 3D viewer');
+                    
                     viewer.src = CONFIG.modelPath;
                 }
                 
@@ -1249,20 +1094,20 @@
                 if (arRecipeCard) {
                     arRecipeCard.style.display = 'none';
                 }
-                console.log('AR mode exited - card hidden');
+                
                 
                 // Make sure button is visible if AR is available
                 if (mode === 'webxr' && !isMobileDevice()) {
-                    console.log('WebXR mode detected - ensuring AR button is visible');
+                    
                     arButton.style.display = '';
                 }
             } else if (status === 'presenting') {
-                console.log('AR is active!');
-                console.log('AR mode:', mode);
+                
+                
                 
                 // Switch to compressed model for AR mode (better performance)
                 if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
-                    console.log('🔄 Switching to compressed model for AR mode:', CONFIG.arModelPath);
+                    
                     viewer.src = CONFIG.arModelPath;
                 }
                 
@@ -1271,7 +1116,7 @@
                 if (arRecipeCard) {
                     if (mode === 'webxr' || !mode) {
                         // WebXR mode (or mode not yet determined but status is presenting)
-                        console.log('✅ AR presenting - recipe card should be visible via DOM Overlay');
+                        
                         console.log('✅ WebXR mode supports HTML overlays (styled via ar-status)');
                         // Ensure visibility
                         arRecipeCard.style.display = 'flex';
@@ -1280,28 +1125,28 @@
                         arRecipeCard.style.left = '50%';
                         arRecipeCard.style.transform = 'translateX(-50%)';
                         arRecipeCard.style.zIndex = '99999';
-                        console.log('✅ AR recipe card visibility confirmed for WebXR');
+                        
                     } else {
-                        console.warn('⚠️ Recipe card will NOT appear in', mode, 'mode');
-                        console.warn('⚠️ HTML overlays only work with WebXR');
+                        
+                        
                         arRecipeCard.style.display = 'none';
                     }
-                    console.log('AR status:', status);
-                    console.log('AR mode:', mode);
+                    
+                    
                 } else {
                     console.error('❌ AR recipe card element not found!');
                 }
                 
                 if (mode === 'quick-look') {
                     isInQuickLook = true;
-                    console.log('✅ QUICK LOOK MODE ACTIVE');
-                    console.log('📱 Quick Look supports built-in animations from USDZ files');
-                    console.log('📖 See: https://developer.apple.com/augmented-reality/quick-look/');
-                    console.log('✅ USDZ file detected:', CONFIG.iosModelPath);
-                    console.log('📋 Quick Look banner configured:', CONFIG.iosBanner);
-                    console.warn('⚠️ Quick Look does NOT support JavaScript-controlled interactions');
+                    
+                    
+                    
+                    
+                    
+                    
                     console.warn('⚠️ Tap-to-advance (JavaScript) will NOT work in Quick Look');
-                    console.log('🎬 Attempting to play full animation sequence before Quick Look launch...');
+                    
                     
                     // Quick Look supports animations that are built into the USDZ file itself
                     // We can try to set up the animation to play the full sequence before Quick Look launches
@@ -1318,11 +1163,11 @@
                         viewer.currentTime = startTime;
                         viewer.play();
                         
-                        console.log(`✅ Configured animation playback: frames ${firstFrame}-${lastFrame}`);
+                        
                         console.log(`✅ Animation duration: ${(endTime - startTime).toFixed(2)}s`);
-                        console.log('💡 If USDZ has animations configured, they should play automatically in Quick Look');
+                        
                     } catch (e) {
-                        console.warn('Could not configure animation playback:', e);
+                        
                     }
                     
                     setTimeout(() => {
@@ -1331,9 +1176,9 @@
                     }, 500);
                 } else if (mode === 'webxr') {
                     isInQuickLook = false;
-                    console.log('✅ WebXR AR session started successfully!');
-                    console.log('✅ JavaScript interactions ARE supported in WebXR mode.');
-                    console.log('🎬 Starting automatic animation playback in AR mode...');
+                    
+                    
+                    
                     
                     // Enable autoplay for AR mode
                     viewer.autoplay = true;
@@ -1348,13 +1193,13 @@
                 } else if (mode === 'scene-viewer') {
                     isInQuickLook = false;
                     console.log('✅ Scene Viewer AR active (Android)');
-                    console.warn('⚠️ Scene Viewer may have limited JavaScript support.');
-                    console.log('📋 Scene Viewer banner configured via link attribute:', viewer.link);
-                    console.log('📋 Scene Viewer title:', viewer.title);
-                    console.log('💡 Scene Viewer 1.1+ supports visit button/banner via link parameter');
-                    console.log('💡 The banner should appear as a "Visit" button in Scene Viewer');
-                    console.warn('⚠️ HTML overlays do NOT work in Scene Viewer');
-                    console.log('🎬 Starting automatic animation playback in AR mode...');
+                    
+                    
+                    
+                    
+                    
+                    
+                    
                     
                     // Enable autoplay for AR mode
                     viewer.autoplay = true;
@@ -1373,10 +1218,10 @@
         // Catch AR launch errors (like the Intent URL error on desktop)
         window.addEventListener('error', (event) => {
             if (event.message && event.message.includes('intent://')) {
-                console.warn('AR Intent URL not supported on this device');
+                
                 if (!isMobileDevice()) {
                     console.info('Scene Viewer (Android) requires a mobile device.');
-                    console.info('WebXR AR may still be available - try clicking the AR button.');
+                    
                 }
             }
         });
@@ -1389,8 +1234,8 @@
         // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
         viewer.addEventListener('message', (event) => {
             if (event.data === '_apple_ar_quicklook_button_tapped') {
-                console.log('🔗 iOS Quick Look banner tapped!');
-                console.log('User tapped the banner button - redirecting to recipe page');
+                
+                
                 // The banner will automatically redirect via canonicalWebPageURL
                 // But we can also track this event for analytics
             }
@@ -1398,13 +1243,13 @@
         
         // Check AR availability after model loads
         viewer.addEventListener('load', async () => {
-            console.log('Model loaded, checking AR availability...');
-            console.log('AR available:', viewer.arAvailable);
-            console.log('AR supported:', viewer.arSupported);
-            console.log('AR modes:', viewer.arModes);
-            console.log('Model loaded:', viewer.loaded);
-            console.log('Model source:', viewer.src);
-            console.log('iOS source:', viewer.iosSrc);
+            
+            
+            
+            
+            
+            
+            
             
             const isMobile = isMobileDevice();
             
@@ -1414,20 +1259,20 @@
                 let webXRSupported = false;
                 if (!isMobile) {
                     webXRSupported = await checkWebXRSupport();
-                    console.log('WebXR support check:', webXRSupported);
-                    console.log('Protocol:', location.protocol);
-                    console.log('Hostname:', location.hostname);
+                    
+                    
+                    
                     
                     if (webXRSupported) {
-                        console.log('✅ WebXR is available! Desktop AR should work.');
-                        console.log('Requirements:');
-                        console.log('- HTTPS or localhost:', location.protocol === 'https:' || location.hostname === 'localhost');
-                        console.log('- Chrome/Edge browser recommended');
-                        console.log('- Camera permissions will be requested');
+                        
+                        
+                        
+                        
+                        
                     } else {
-                        console.log('⚠️ WebXR not available on desktop');
-                        console.log('To enable WebXR:');
-                        console.log('1. Use Chrome or Edge browser');
+                        
+                        
+                        
                         console.log('2. Ensure HTTPS (or localhost)');
                         console.log('3. Check chrome://flags/#webxr-incubations (if needed)');
                     }
@@ -1435,58 +1280,58 @@
                 
                 // Only hide button if AR is not available AND WebXR is not supported (on desktop)
                 if (!viewer.arAvailable && !isMobile && !webXRSupported) {
-                    console.log('Hiding AR button - no AR support detected');
+                    
                     arButton.style.display = 'none';
                 } else if (!viewer.arAvailable && !isMobile && webXRSupported) {
-                    console.log('Keeping AR button visible - WebXR detected');
+                    
                     arButton.style.display = '';
                 }
                 
                 // Log AR capabilities
                 let mobileWebXRSupported = false;
                 if (isMobile) {
-                    console.log('Mobile device detected');
-                    console.log('AR available:', viewer.arAvailable);
-                    console.log('AR supported:', viewer.arSupported);
+                    
+                    
+                    
                     
                     // Check WebXR support on mobile too (for Android)
                     mobileWebXRSupported = await checkWebXRSupport();
-                    console.log('WebXR support on mobile:', mobileWebXRSupported);
+                    
                     
                     if (mobileWebXRSupported) {
-                        console.log('✅ WebXR IS available on this mobile device!');
-                        console.log('💡 WebXR should be prioritized over Scene Viewer');
+                        
+                        
                         console.log('💡 WebXR supports HTML overlays (styled via ar-status)');
-                        console.log('⚠️ If Scene Viewer launches instead, the recipe card will NOT appear');
+                        
                     } else {
-                        console.warn('⚠️ WebXR NOT available on this mobile device');
+                        
                         console.warn('⚠️ Will fall back to Scene Viewer (Android) or Quick Look (iOS)');
-                        console.warn('⚠️ Scene Viewer does NOT support HTML overlays');
-                        console.warn('⚠️ Recipe card will NOT appear in Scene Viewer mode');
+                        
+                        
                     }
                     
                     if (!viewer.arAvailable) {
-                        console.warn('AR not available on this mobile device');
-                        console.log('Possible reasons:');
-                        console.log('1. Browser does not support AR');
-                        console.log('2. Model file too large');
+                        
+                        
+                        
+                        
                         console.log('3. Missing USDZ file (for iOS)');
-                        console.log('4. Camera permissions not granted');
-                        console.log('5. Device does not support AR');
+                        
+                        
                     }
                 } else {
-                    console.log('Desktop device detected');
+                    
                     console.log('AR available (model-viewer):', viewer.arAvailable);
-                    console.log('WebXR available:', webXRSupported);
+                    
                     if (viewer.arAvailable || webXRSupported) {
-                        console.log('✅ AR should work on this desktop browser');
+                        
                     }
                 }
                 
                 // Store AR capability status globally
                 // AR is available if: model-viewer reports it, OR WebXR is supported, OR mobile has AR/WebXR
                 hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported));
-                console.log('📱 AR Capability Status:', hasARCapability);
+                
             }, 2000); // Increased timeout to allow WebXR to initialize
         });
 
@@ -1502,18 +1347,6 @@
         // EVENT HANDLERS
         // ============================================
 
-        // ============================================
-        // DEBUG: Log non-click events (click events handled separately)
-        // ============================================
-        const eventsToLog = ['ar-status', 'load', 'model-load', 'error', 'scene-graph-ready'];
-        eventsToLog.forEach(eventType => {
-            viewer.addEventListener(eventType, (e) => {
-                console.log(`[${eventType}] event fired`);
-                if (e.detail && typeof e.detail === 'object') {
-                    console.log(`[${eventType}] event.detail:`, e.detail);
-                }
-            });
-        });
 
         // Track last click to prevent duplicate processing
         let lastClickTime = 0;
@@ -1542,25 +1375,25 @@
             
             // Warn if in Quick Look mode
             if (isInQuickLook) {
-                console.warn('⚠️ Click detected but Quick Look does not support JavaScript interactions');
+                
                 return;
             }
             
             // If auto-play is running in AR mode, stop it and switch to manual control
             if (isAutoPlaying && currentARMode && currentARMode !== 'not-presenting') {
-                console.log('🛑 User tap detected - stopping auto-play and switching to manual control');
+                
                 stopAutoPlay();
             }
             
             // Ignore if animating (unless it's a looping step)
             if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop) {
-                console.log('Ignoring click - animation in progress');
+                
                 return;
             }
             
             // Ignore AR button clicks
             if (event.target && (event.target.id === 'ar-button' || event.target.closest('#ar-button'))) {
-                console.log('Ignoring click - AR button');
+                
                 return;
             }
             
@@ -1583,7 +1416,7 @@
             // VALIDATION: Ensure coordinates are valid numbers
             if (typeof clientX !== 'number' || typeof clientY !== 'number' || 
                 isNaN(clientX) || isNaN(clientY)) {
-                console.warn('⚠️ Invalid coordinates detected:', { clientX, clientY });
+                
                 console.warn('Event details:', {
                     hasTouches: !!event.touches,
                     touchesLength: event.touches?.length,
@@ -1654,9 +1487,9 @@
             
             // Log the node name for debugging (preserve the name)
             if (nodeName) {
-                console.log('✅ Hit node:', nodeName);
+                
             } else {
-                console.log('❌ No node hit at coordinates:', { clientX, clientY });
+                
             }
             
             // Helper function to get next step prompt
@@ -1676,11 +1509,11 @@
             
             // Find which step this node belongs to
             const objectStepIndex = getStepIndexForNode(nodeName);
-            console.log('Node maps to step:', objectStepIndex);
+            
             
             if (objectStepIndex === -1) {
                 // Clicked node is not interactive
-                console.log('Node is not in interactive objects list:', nodeName);
+                
                 descText.innerText = getNextStepPrompt();
                 return;
             }
@@ -1690,27 +1523,27 @@
             
             if (objectStepIndex === expectedStepIndex) {
                 // Correct object clicked - advance!
-                console.log('✅ Correct object clicked! Advancing to step', expectedStepIndex);
+                
                 playNextStep();
             } else if (objectStepIndex < expectedStepIndex) {
                 // Clicked an object from a previous step
-                console.log('⚠️ Clicked previous step object');
+                
                 descText.innerText = getNextStepPrompt();
             } else {
                 // Clicked an object from a future step
-                console.log('⚠️ Clicked future step object');
+                
                 descText.innerText = getNextStepPrompt();
             }
         });
         
         // Also listen for touchstart/touchend to catch mobile taps
         viewer.addEventListener('touchstart', (event) => {
-            console.log('Touchstart event fired');
+            
             // Let the click handler process it
         });
         
         viewer.addEventListener('touchend', (event) => {
-            console.log('Touchend event fired');
+            
             // Let the click handler process it
         });
 
@@ -1725,7 +1558,7 @@
                 
                 // Only work in non-AR mode (object mode / 3D viewer)
                 if (currentARMode && currentARMode !== 'not-presenting') {
-                    console.log('Card click ignored - AR mode is active');
+                    
                     return;
                 }
                 
@@ -1735,29 +1568,27 @@
                 // Ignore if animating (unless it's a looping step OR step 6 is completed)
                 // Allow clicks after step 6 completes even if animation flag is still set
                 if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep6Completed) {
-                    console.log('Card click ignored - animation in progress');
+                    
                     return;
                 }
                 
-                console.log('🎬 Welcome card clicked');
                 
-                // Check if step 6 is completed - if so, launch AR (only if device has AR capability)
+                
+                // Check if step 6 is completed - if so, launch AR or redirect
                 if (isStep6Completed) {
                     if (hasARCapability) {
                         // Step 6 completed and device has AR - launch AR with compressed model
-                        console.log('🚀 Step 6 completed - launching AR with compressed model');
                         launchARWithCompressedModel();
                     } else {
-                        // Step 6 completed but no AR - recipe card should already be showing
-                        console.log('⚠️ Step 6 completed but device has no AR capability');
-                        console.log('💡 Recipe card should be visible for user to tap');
+                        // Step 6 completed but no AR - redirect to recipe page
+                        window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
                     }
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
                     // Advance to next step
                     playNextStep();
                 } else {
                     // All steps completed - restart
-                    console.log('All steps completed - restarting experience');
+                    
                     resetExperience();
                     // Then play first step
                     setTimeout(() => {
@@ -1766,7 +1597,7 @@
                 }
             });
             
-            console.log('✅ Welcome card click handler attached');
+            
         }
 
         // ============================================
@@ -1786,7 +1617,7 @@
             const recipeLinks = arRecipeCard.querySelectorAll('a');
             recipeLinks.forEach(link => {
                 link.addEventListener('click', () => {
-                    console.log('🔗 AR Recipe clicked - opening Nescafé Dalgona recipe');
+                    
                 });
             });
             
@@ -1799,13 +1630,13 @@
 
         // Function to launch AR with compressed model
         function launchARWithCompressedModel() {
-            console.log('🚀 Launching AR with compressed model:', CONFIG.arModelPath);
+            
             
             // Switch to compressed model for AR
             if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
                 const previousSrc = viewer.src;
                 viewer.src = CONFIG.arModelPath;
-                console.log('✅ Switched to compressed model for AR');
+                
                 
                 // Wait for model to load, then activate AR
                 const activateARAfterLoad = () => {
@@ -1842,7 +1673,7 @@
                             });
                             tempButton.dispatchEvent(clickEvent);
                         }
-                        console.log('✅ AR button triggered');
+                        
                     } catch (error) {
                         console.error('❌ Error triggering AR:', error);
                         // Fallback: show message to user
@@ -1866,17 +1697,10 @@
             // Check if this is the last step (step 6)
             const isLastStep = currentStepIndex === CONFIG.steps.length - 1;
 
-            // Update UI
+            // Update UI - use step's title and desc directly
             titleText.innerText = stepData.title;
-            if (!isLastStep) {
-                // Show next step's prompt
-                const nextStep = CONFIG.steps[currentStepIndex + 1];
-                if (nextStep && nextStep.nextPrompt) {
-                    descText.innerText = nextStep.nextPrompt;
-                } else {
-                    descText.innerText = 'Tap to continue';
-                }
-            }
+            descText.innerText = stepData.desc;
+            
             // Note: Last step completion is handled by handleStep6Completion() in playKeyframeRange
             isAnimating = true;
 
@@ -1886,13 +1710,12 @@
 
         // Function to handle step 6 completion based on AR capability
         function handleStep6Completion() {
-            console.log('🎉 Step 6 completed. AR capability:', hasARCapability);
+            const step6Data = CONFIG.steps[CONFIG.steps.length - 1];
             
             if (hasARCapability) {
                 // Device has AR - show welcome card with AR prompt
-                console.log('✅ Device has AR capability - showing AR prompt');
-                titleText.innerText = 'Step 6';
-                descText.innerText = "Tap to view NESCAFÉ's Dalgona Coffee in your space";
+                titleText.innerText = step6Data.title;
+                descText.innerText = step6Data.desc;
                 // Ensure welcome card is visible
                 if (card) {
                     card.style.display = 'inline-block';
@@ -1903,17 +1726,17 @@
                     arRecipeCard.classList.remove('show-in-viewer');
                 }
             } else {
-                // Device doesn't have AR - show recipe card instead
-                console.log('❌ Device does not have AR capability - showing recipe card');
-                // Hide welcome card
+                // Device doesn't have AR - show recipe message on welcome card
+                titleText.innerText = 'Discover 30 days of Nescafe recipes this Ramadan.';
+                descText.innerText = '';
+                // Ensure welcome card is visible
                 if (card) {
-                    card.style.display = 'none';
+                    card.style.display = 'inline-block';
                 }
-                // Show AR recipe card in viewer mode
+                // Hide AR recipe card
                 const arRecipeCard = document.querySelector('#ar-recipe-card');
                 if (arRecipeCard) {
-                    arRecipeCard.classList.add('show-in-viewer');
-                    console.log('✅ Recipe card shown for non-AR devices');
+                    arRecipeCard.classList.remove('show-in-viewer');
                 }
             }
         }
@@ -1944,11 +1767,11 @@
 
         function playAllStepsAuto() {
             if (isAutoPlaying) {
-                console.log('Auto-play already in progress');
+                
                 return;
             }
 
-            console.log('🎬 Starting auto-play sequence in AR mode');
+            
             isAutoPlaying = true;
             
             // Reset to beginning
@@ -1961,7 +1784,7 @@
             function playNextAutoStep() {
                 if (currentStepIndex >= CONFIG.steps.length - 1) {
                     // All steps completed
-                    console.log('✅ Auto-play sequence completed');
+                    
                     isAutoPlaying = false;
                     const lastStep = CONFIG.steps[CONFIG.steps.length - 1];
                     titleText.innerText = lastStep.title;
@@ -1976,20 +1799,12 @@
                 currentStepIndex++;
                 const stepData = CONFIG.steps[currentStepIndex];
                 
-                console.log(`🎬 Auto-playing step ${currentStepIndex + 1}/${CONFIG.steps.length}: ${stepData.title}`);
+                
 
-                // Update UI
+                // Update UI - use step's title and desc directly
                 titleText.innerText = stepData.title;
-                const isLastStep = currentStepIndex === CONFIG.steps.length - 1;
-                if (!isLastStep) {
-                    // Show next step's prompt
-                    const nextStep = CONFIG.steps[currentStepIndex + 1];
-                    if (nextStep && nextStep.nextPrompt) {
-                        descText.innerText = nextStep.nextPrompt;
-                    } else {
-                        descText.innerText = 'Tap to continue';
-                    }
-                }
+                descText.innerText = stepData.desc;
+                
                 // Note: Last step completion is handled by handleStep6Completion() in checkAutoPlayback
                 isAnimating = true;
 
@@ -2037,7 +1852,7 @@
             }
             isAutoPlaying = false;
             isAnimating = false;
-            console.log('⏹️ Auto-play stopped');
+            
             
                     // Recipe link doesn't need reset (it's just a link)
         }
@@ -2053,7 +1868,7 @@
         });
 
         viewer.addEventListener('load', () => {
-            console.log('Model loaded successfully');
+            
             console.log('Click handler ready:', {
                 hasRaycaster: !!raycaster,
                 hierarchyNodesCount: hierarchyNodes.length,
@@ -2063,12 +1878,12 @@
             
             // Test click detection setup
             if (!raycaster || !hierarchyNodes.length) {
-                console.warn('⚠️ Click detection not fully initialized. Retrying...');
+                
                 setTimeout(() => {
                     setupHitDetection();
                 }, 500);
             } else {
-                console.log('✅ Click detection ready! Try tapping objects.');
+                
             }
         });
 
@@ -2079,10 +1894,10 @@
         // Uncomment to debug object names:
         // viewer.addEventListener('load', () => {
         //     const scene = viewer.getScene();
-        //     console.log('=== All Objects in Model ===');
+        //     
         //     scene.traverse((object) => {
         //         if (object.isMesh) {
-        //             console.log(`Name: "${object.name}", Type: ${object.type}`);
+        //             
         //         }
         //     });
         // });
@@ -2090,3 +1905,4 @@
     </script>
 </body>
 </html>
+
