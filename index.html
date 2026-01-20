@@ -1168,10 +1168,10 @@
                         const startTime = frameToTime(firstFrame);
                         const endTime = frameToTime(lastFrame);
                         
-                        viewer.autoplay = true;
+                        viewer.autoplay = false;
                         viewer.loop = false;
                         viewer.currentTime = startTime;
-                        viewer.play();
+                        // Animation will play on user interaction only
                         
                         
                         console.log(`✅ Animation duration: ${(endTime - startTime).toFixed(2)}s`);
@@ -1190,16 +1190,11 @@
                     
                     
                     
-                    // Enable autoplay for AR mode
-                    viewer.autoplay = true;
+                    // Disable autoplay - animations play on user interaction only
+                    viewer.autoplay = false;
                     viewer.loop = false;
                     viewer.currentTime = frameToTime(0);
-                    viewer.play();
-                    
-                    // Start auto-play in AR mode
-                    setTimeout(() => {
-                        playAllStepsAuto();
-                    }, 1000); // Small delay to ensure AR is fully initialized
+                    // Don't auto-play - wait for user interaction
                 } else if (mode === 'scene-viewer') {
                     isInQuickLook = false;
                     console.log('✅ Scene Viewer AR active (Android)');
@@ -1211,16 +1206,11 @@
                     
                     
                     
-                    // Enable autoplay for AR mode
-                    viewer.autoplay = true;
+                    // Disable autoplay - animations play on user interaction only
+                    viewer.autoplay = false;
                     viewer.loop = false;
                     viewer.currentTime = frameToTime(0);
-                    viewer.play();
-                    
-                    // Start auto-play in AR mode (may work depending on Android version)
-                    setTimeout(() => {
-                        playAllStepsAuto();
-                    }, 1000); // Small delay to ensure AR is fully initialized
+                    // Don't auto-play - wait for user interaction
                 }
             }
         });
