@@ -1632,6 +1632,59 @@
         viewer.addEventListener('click', (event) => {
             const now = Date.now();
             
+            // Get coordinates first - handle both mouse and touch events
+            let clientX, clientY;
+            if (event.touches && event.touches.length > 0) {
+                // Touch event
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else if (event.changedTouches && event.changedTouches.length > 0) {
+                // Touch event (changedTouches for touchend)
+                clientX = event.changedTouches[0].clientX;
+                clientY = event.changedTouches[0].clientY;
+            } else {
+                // Mouse event
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+            
+            // Check if Step 7 is completed (AR launch step) - if so, ignore clicks on model-viewer
+            // Only the welcome card should be clickable to trigger AR at this point
+            const isStep7Completed = currentStepIndex === CONFIG.steps.length - 1 && CONFIG.steps[currentStepIndex]?.noAnimation;
+            if (isStep7Completed) {
+                // Check if click target is the card or a child of the card
+                const clickTargetIsCard = event.target && card && (
+                    event.target === card || 
+                    event.target.closest('#info-card') === card ||
+                    card.contains(event.target)
+                );
+                
+                // Also check coordinates as fallback
+                const cardRect = card ? card.getBoundingClientRect() : null;
+                const clickOnCardByCoords = cardRect && 
+                    clientX >= cardRect.left && 
+                    clientX <= cardRect.right && 
+                    clientY >= cardRect.top && 
+                    clientY <= cardRect.bottom;
+                
+                const clickOnCard = clickTargetIsCard || clickOnCardByCoords;
+                
+                if (!clickOnCard) {
+                    trackedLog('Model-viewer click ignored - Step 7 active, use welcome card to launch AR', {
+                        clickedOnCard: false,
+                        clickTargetIsCard: clickTargetIsCard,
+                        clickOnCardByCoords: clickOnCardByCoords,
+                        clickTarget: event.target?.id || event.target?.className,
+                        cardRect: cardRect,
+                        clickCoords: { x: clientX, y: clientY }
+                    });
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+                // If click is on card, let it bubble to card handler (card has stopPropagation)
+            }
+            
             console.log('Click event fired!', {
                 target: event.target,
                 type: event.type,
@@ -1670,22 +1723,6 @@
             if (event.target && (event.target.id === 'ar-button' || event.target.closest('#ar-button'))) {
                 
                 return;
-            }
-            
-            // Get coordinates - handle both mouse and touch events
-            let clientX, clientY;
-            if (event.touches && event.touches.length > 0) {
-                // Touch event
-                clientX = event.touches[0].clientX;
-                clientY = event.touches[0].clientY;
-            } else if (event.changedTouches && event.changedTouches.length > 0) {
-                // Touch event (changedTouches for touchend)
-                clientX = event.changedTouches[0].clientX;
-                clientY = event.changedTouches[0].clientY;
-            } else {
-                // Mouse event
-                clientX = event.clientX;
-                clientY = event.clientY;
             }
             
             // VALIDATION: Ensure coordinates are valid numbers
