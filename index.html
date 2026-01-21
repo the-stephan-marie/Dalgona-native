@@ -419,6 +419,7 @@
     <model-viewer 
         id="ar-viewer"
         src="assets/Dalgona-OneTake_0004.glb"
+        ios-src="assets/Dalgona-OneTake_0004.usdz"
         ar
         ar-modes="webxr scene-viewer quick-look"
         link="https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona"
@@ -681,7 +682,9 @@
 
         // Set model paths from config
         viewer.src = CONFIG.modelPath;
-        // Set iOS source with Quick Look banner parameters
+        // Enhance iOS source with Quick Look banner parameters
+        // Note: ios-src is already set in HTML for immediate Quick Look availability
+        // Here we enhance it with absolute URL and banner parameters for better UX
         if (CONFIG.iosModelPath) {
             // Build iOS URL with banner parameters
             // Parameters are appended with # and separated by &
