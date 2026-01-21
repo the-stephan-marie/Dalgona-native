@@ -569,6 +569,7 @@
             
             // Path to iOS USDZ format (for better iOS Quick Look support)
             // USDZ file provides native animation support in Quick Look
+            // Using compressed USDZ for optimal Quick Look AR performance
             iosModelPath: 'assets/dalgona-compressed.usdz',
             
             // iOS Quick Look Banner Configuration
@@ -1981,11 +1982,11 @@
         function launchARWithCompressedModel() {
             const isIOS = isIOSDevice();
             
-            // For iOS: Quick Look uses USDZ, so we need to ensure ios-src is set correctly
-            // For other platforms: use compressed GLB
+            // For iOS: Quick Look uses compressed USDZ (dalgona-compressed.usdz)
+            // For other platforms: use compressed GLB (dalgona-compressed.glb)
             if (isIOS) {
                 // iOS Quick Look - ensure ios-src is set (it should already be set)
-                // Quick Look will use the USDZ file specified in ios-src
+                // Quick Look will use the compressed USDZ file specified in ios-src (dalgona-compressed.usdz)
                 if (!viewer.iosSrc) {
                     console.error('❌ iOS Quick Look requires ios-src attribute to be set');
                     descText.innerText = 'AR not available - missing USDZ file';
