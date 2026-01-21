@@ -564,13 +564,10 @@
             // Path to your 3D model (GLB format) - for 3D viewer mode
             modelPath: 'assets/Dalgona-OneTake_0004.glb',
             
-            // Path to compressed model for AR mode (smaller file size for better AR performance)
-            arModelPath: 'assets/dalgona-compressed.glb',
-            
-            // Path to iOS USDZ format (for better iOS Quick Look support)
+            // Path to iOS USDZ format (for iOS Quick Look support)
             // USDZ file provides native animation support in Quick Look
-            // Using compressed USDZ for optimal Quick Look AR performance
-            iosModelPath: 'assets/dalgona-compressed.usdz',
+            // iOS Quick Look automatically uses this USDZ file when AR is activated
+            iosModelPath: 'assets/Dalgona-OneTake_0004.usdz',
             
             // iOS Quick Look Banner Configuration
             // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
@@ -1904,12 +1901,12 @@
                                 });
                                 // Fallback to async method
                                 trackedWarn('Falling back to async AR launch method');
-                                launchARWithCompressedModel();
+                                launchAR();
                             }
                         } else {
-                            // Android/WebXR - use async method
+                            // Android/WebXR - activate AR
                             trackedLog('Launching AR - Android/WebXR device detected');
-                            launchARWithCompressedModel();
+                            launchAR();
                         }
                     } else {
                         // Step 7 completed but no AR (or desktop) - redirect to recipe page
@@ -1964,34 +1961,31 @@
         // PLAYBACK FUNCTIONS
         // ============================================
 
-        // Function to launch AR with compressed model
-        function launchARWithCompressedModel() {
+        // Function to launch AR
+        // iOS Quick Look automatically uses the USDZ file specified in ios-src
+        // Other platforms use the GLB file specified in src
+        function launchAR() {
             const isIOS = isIOSDevice();
             
-            // For iOS: Quick Look uses compressed USDZ (dalgona-compressed.usdz)
-            // For other platforms: use compressed GLB (dalgona-compressed.glb)
             if (isIOS) {
-                // iOS Quick Look - ensure ios-src is set (it should already be set)
-                // Quick Look will use the compressed USDZ file specified in ios-src (dalgona-compressed.usdz)
+                // iOS Quick Look - ensure ios-src is set (it should already be set during initialization)
                 if (!viewer.iosSrc) {
-                    console.error('❌ iOS Quick Look requires ios-src attribute to be set');
+                    trackedError('❌ iOS Quick Look requires ios-src attribute to be set');
                     descText.innerText = 'AR not available - missing USDZ file';
                     return;
                 }
                 
-                // For iOS, we need to trigger AR synchronously as part of the user gesture
-                // Create and immediately click the AR button within the same event handler
+                // For iOS, trigger AR synchronously as part of the user gesture
                 activateARForIOS();
             } else {
                 // Android/WebXR - activate AR directly
-                // Model-viewer handles model selection automatically based on AR mode
+                // Model-viewer automatically uses the GLB file from src attribute
                 activateARForWebXR();
             }
             
             function activateARForIOS() {
                 trackedLog('activateARForIOS() called');
-                // For iOS Quick Look, we need to trigger AR synchronously as part of user gesture
-                // First, try to find the existing AR button that model-viewer creates
+                // Find or create AR button for iOS Quick Look
                 let arButton = viewer.querySelector('button[slot="ar-button"]');
                 
                 trackedLog('AR Button search:', {
@@ -2002,7 +1996,6 @@
                 
                 if (!arButton) {
                     trackedLog('Creating new AR button...');
-                    // If no button exists, create one
                     arButton = document.createElement('button');
                     arButton.slot = 'ar-button';
                     arButton.setAttribute('aria-label', 'Launch AR');
@@ -2011,8 +2004,6 @@
                     trackedLog('AR button created and appended');
                 } else {
                     trackedLog('Using existing AR button');
-                    // Temporarily make the existing button visible and clickable
-                    const originalDisplay = arButton.style.display;
                     arButton.style.display = 'block';
                     arButton.style.opacity = '0';
                     arButton.style.pointerEvents = 'auto';
@@ -2024,27 +2015,21 @@
                     arButton.style.zIndex = '9999';
                 }
                 
-                // Trigger click immediately (synchronously) to preserve user gesture
+                // Trigger click synchronously to preserve user gesture chain
                 try {
                     trackedLog('Attempting to trigger AR button click...');
-                    // Use a trusted click event
-                    const clickEvent = new MouseEvent('click', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        buttons: 1,
-                        isTrusted: false // We'll try to make it trusted via direct click
-                    });
-                    
-                    // Try direct click first (this preserves the user gesture chain better)
                     if (arButton.click) {
                         arButton.click();
                         trackedLog('✅ AR button clicked via .click()');
                     } else {
-                        arButton.dispatchEvent(clickEvent);
+                        arButton.dispatchEvent(new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window,
+                            buttons: 1
+                        }));
                         trackedLog('✅ AR button clicked via dispatchEvent()');
                     }
-                    
                     trackedLog('✅ iOS Quick Look AR triggered');
                 } catch (error) {
                     trackedError('❌ Error triggering iOS AR:', error);
@@ -2070,12 +2055,10 @@
                     // Clean up after a short delay
                     setTimeout(() => {
                         if (arButton && arButton.parentNode) {
-                            // Only remove if we created it
                             if (!viewer.querySelector('button[slot="ar-button"]')) {
                                 arButton.remove();
                                 trackedLog('Created AR button removed');
                             } else {
-                                // Restore original display if we modified an existing button
                                 arButton.style.display = '';
                                 arButton.style.opacity = '';
                                 arButton.style.pointerEvents = '';
@@ -2088,7 +2071,6 @@
             
             function activateARForWebXR() {
                 // Create a temporary AR button and trigger it
-                // This is the most reliable way to activate AR in model-viewer
                 const tempButton = document.createElement('button');
                 tempButton.slot = 'ar-button';
                 tempButton.style.cssText = 'display: none; position: absolute; opacity: 0; pointer-events: none;';
@@ -2098,21 +2080,17 @@
                 // Wait a moment for button to be registered, then trigger click
                 setTimeout(() => {
                     try {
-                        // Try multiple methods to trigger AR
                         if (tempButton.click) {
                             tempButton.click();
                         } else if (tempButton.dispatchEvent) {
-                            const clickEvent = new MouseEvent('click', {
+                            tempButton.dispatchEvent(new MouseEvent('click', {
                                 bubbles: true,
                                 cancelable: true,
                                 view: window
-                            });
-                            tempButton.dispatchEvent(clickEvent);
+                            }));
                         }
-                        
                     } catch (error) {
-                        console.error('❌ Error triggering AR:', error);
-                        // Fallback: show message to user
+                        trackedError('❌ Error triggering AR:', error);
                         descText.innerText = 'Please use your browser\'s AR button to view in AR';
                     } finally {
                         // Clean up after a delay
