@@ -133,71 +133,41 @@
             z-index: 100;
         }
 
-        /* Light sweep animation */
-        @keyframes lightSweep {
-            0% {
-                background-position: -200% center;
-            }
-            100% {
-                background-position: 200% center;
-            }
-        }
-
         /* The Branding / Instruction Card */
         .card {
             display: inline-block;
-            background: #dc2626; /* Red background */
-            background-image: linear-gradient(
-                90deg,
-                transparent 0%,
-                rgba(255, 255, 255, 0.3) 50%,
-                transparent 100%
-            );
-            background-size: 200% 100%;
-            background-position: -200% center;
-            animation: lightSweep 3s ease-in-out infinite;
+            background: white;
             padding: 16px 24px;
             border-radius: 50px;
-            box-shadow: 
-                0 10px 30px rgba(0, 0, 0, 0.4), /* Drop shadow */
-                0 0 20px rgba(220, 38, 38, 0.3); /* Faint outer glow */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
             transform: translateY(0);
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             pointer-events: auto; /* Enable clicks on the card */
             cursor: pointer; /* Show it's clickable */
-            position: relative;
         }
 
         .card:hover {
             transform: translateY(-2px);
-            box-shadow: 
-                0 12px 35px rgba(0, 0, 0, 0.5), /* Stronger drop shadow on hover */
-                0 0 25px rgba(220, 38, 38, 0.4); /* Stronger glow on hover */
+            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
         }
 
         .card:active {
             transform: translateY(0);
-            box-shadow: 
-                0 8px 25px rgba(0, 0, 0, 0.4),
-                0 0 15px rgba(220, 38, 38, 0.3);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
         }
 
         .card h2 {
             margin: 0;
             font-size: 18px;
-            color: #ffffff; /* White text */
+            color: #333;
             text-transform: uppercase;
             letter-spacing: 1px;
-            position: relative;
-            z-index: 1;
         }
 
         .card p {
             margin: 4px 0 0 0;
             font-size: 14px;
-            color: #ffffff; /* White text */
-            position: relative;
-            z-index: 1;
+            color: #555;
         }
 
         /* Hide UI while loading */
@@ -351,7 +321,6 @@
         disable-tap
         shadow-intensity="1.2"
         environment-image="assets/bryanston_park_sunrise_1k.hdr" 
-        exposure="1.1"
         tone-mapping="commerce"
         animation-name="animation_0">
         
@@ -460,7 +429,7 @@
                 },
                 { 
                     startFrame: 300,
-                    endFrame: 358,
+                    endFrame: 360,
                     title: 'Ready to sip.',
                     desc: '',
                     objectHint: 'Tap to continue',
@@ -469,8 +438,8 @@
                 { 
                     startFrame: 360,
                     endFrame: 360,
-                    title: 'View it in your space', 
-                    desc: 'Enjoy your NESCAFÉ®',
+                    title: 'Enjoy your NESCAFÉ® 3in1 Dalgona Coffee Cup', 
+                    desc: 'Tap to see view it in your space',
                     objectHint: 'Tap to view in AR',
                     loop: false,
                     noAnimation: true  // Flag to indicate this step doesn't play animation
@@ -590,8 +559,6 @@
             // Set initial time to frame 0
             viewer.currentTime = frameToTime(0);
             viewer.pause();
-            // Ensure looping is disabled from the start
-            viewer.loop = false;
             
             // Access hierarchy and build mappings
             setupHitDetection();
@@ -874,74 +841,22 @@
             const startTime = frameToTime(stepData.startFrame);
             const endTime = frameToTime(stepData.endFrame);
             
-            // Explicitly disable looping before setting time
-            viewer.loop = false;
-            
             // Set the start time
             viewer.currentTime = startTime;
             
             // Play the animation
             viewer.play();
-            // Ensure loop is set correctly (should be false for all steps)
             viewer.loop = stepData.loop || false;
-            
-            // Add event listener to catch when animation reaches end
-            const handleTimeUpdate = () => {
-                // Clamp currentTime to prevent going beyond endTime
-                if (viewer.currentTime > endTime) {
-                    viewer.currentTime = endTime;
-                    viewer.pause();
-                    viewer.loop = false;
-                    isAnimating = false;
-                    viewer.removeEventListener('timeupdate', handleTimeUpdate);
-                    
-                    // Handle completion
-                    if (!stepData.loop) {
-                        if (currentStepIndex < CONFIG.steps.length - 1) {
-                            // Show next step's description
-                            const nextStep = CONFIG.steps[currentStepIndex + 1];
-                            if (nextStep) {
-                                titleText.innerText = nextStep.title;
-                                descText.innerText = nextStep.desc;
-                            }
-                            
-                            // If step 4 (index 3) just completed, ensure AR capability is determined before step 5
-                            if (currentStepIndex === 3) {
-                                // AR capability should already be checked, but verify it's set
-                                // This ensures we know AR status before step 5 completes
-                            }
-                        } else {
-                            // Step 6 completed - wait for user to click card to advance to Step 7
-                            // Don't auto-advance - let user control when to proceed
-                            // The card will be clickable to advance to Step 7
-                        }
-                    }
-                }
-            };
-            
-            // Listen for time updates
-            viewer.addEventListener('timeupdate', handleTimeUpdate);
             
             // Monitor playback using requestAnimationFrame for smooth control
             function checkPlayback() {
-                if (!isAnimating) {
-                    viewer.removeEventListener('timeupdate', handleTimeUpdate);
-                    return; // Stop if user advanced
-                }
-                
-                // Clamp currentTime to prevent looping beyond endTime
-                if (viewer.currentTime > endTime) {
-                    viewer.currentTime = endTime;
-                }
+                if (!isAnimating) return; // Stop if user advanced
                 
                 if (viewer.currentTime >= endTime) {
                     // Ensure we're exactly on the final frame
                     viewer.currentTime = endTime;
                     viewer.pause();
-                    // Explicitly disable looping to prevent any automatic restart
-                    viewer.loop = false;
                     isAnimating = false;
-                    viewer.removeEventListener('timeupdate', handleTimeUpdate);
                     
                     if (stepData.loop) {
                         // Restart this range
@@ -950,10 +865,6 @@
                         requestAnimationFrame(checkPlayback);
                     } else {
                         // Finished - stay on final frame
-                        // Ensure loop is disabled
-                        viewer.loop = false;
-                        viewer.pause();
-                        
                         if (currentStepIndex < CONFIG.steps.length - 1) {
                             // Show next step's description
                             const nextStep = CONFIG.steps[currentStepIndex + 1];
@@ -968,9 +879,9 @@
                                 // This ensures we know AR status before step 5 completes
                             }
                         } else {
-                            // Step 6 completed - wait for user to click card to advance to Step 7
-                            // Don't auto-advance - let user control when to proceed
-                            // The card will be clickable to advance to Step 7
+                            // Step 6 completed - advance to Step 7 (AR launch step)
+                            // Step 7 doesn't play animation, just shows UI
+                            playNextStep();
                         }
                     }
                 } else {
@@ -1021,21 +932,6 @@
         // Detect mobile devices
         function isMobileDevice() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        }
-        
-        // Detect iOS devices specifically
-        function isIOSDevice() {
-            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        }
-        
-        // Check if Quick Look is available (iOS AR)
-        function hasQuickLookSupport() {
-            // Quick Look is available if:
-            // 1. Device is iOS
-            // 2. ios-src is set on the viewer OR arModes includes 'quick-look'
-            const hasIOSSrc = !!viewer.iosSrc;
-            const hasQuickLookMode = viewer.arModes && viewer.arModes.includes('quick-look');
-            return isIOSDevice() && (hasIOSSrc || hasQuickLookMode);
         }
         
         // Check if WebXR is available (for desktop AR)
@@ -1263,8 +1159,6 @@
                 
                 if (mode === 'quick-look') {
                     isInQuickLook = true;
-                    // Quick Look is active - ensure AR capability is set
-                    hasARCapability = true;
                     
                     
                     
@@ -1445,24 +1339,8 @@
                 }
                 
                 // Store AR capability status globally
-                // AR is available if: 
-                // - model-viewer reports it, OR 
-                // - WebXR is supported, OR 
-                // - mobile has AR/WebXR, OR
-                // - iOS device has Quick Look support (ios-src is set)
-                const quickLookSupported = hasQuickLookSupport();
-                hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported)) || quickLookSupported;
-                
-                // Log AR capability detection for debugging
-                if (isIOSDevice()) {
-                    console.log('📱 iOS Device AR Capability Check:', {
-                        arAvailable: viewer.arAvailable,
-                        iosSrc: !!viewer.iosSrc,
-                        arModes: viewer.arModes,
-                        quickLookSupported: quickLookSupported,
-                        hasARCapability: hasARCapability
-                    });
-                }
+                // AR is available if: model-viewer reports it, OR WebXR is supported, OR mobile has AR/WebXR
+                hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported));
                 
             }, 2000); // Increased timeout to allow WebXR to initialize
         });
@@ -1697,12 +1575,9 @@
                 // Check if step 7 is completed (the AR launch step)
                 const isStep7Completed = currentStepIndex === CONFIG.steps.length - 1 && CONFIG.steps[currentStepIndex]?.noAnimation;
                 
-                // Check if Step 6 just completed (index 5) - allow advancing to Step 7
-                const isStep6Completed = currentStepIndex === 5 && !isAnimating;
-                
-                // Ignore if animating (unless it's a looping step OR step 7 is completed OR step 6 just completed)
-                // Allow clicks after step 6/7 completes even if animation flag is still set
-                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep7Completed && !isStep6Completed) {
+                // Ignore if animating (unless it's a looping step OR step 7 is completed)
+                // Allow clicks after step 7 completes even if animation flag is still set
+                if (isAnimating && !CONFIG.steps[currentStepIndex]?.loop && !isStep7Completed) {
                     
                     return;
                 }
@@ -1711,26 +1586,13 @@
                 
                 // Check if step 7 is completed - if so, launch AR or redirect
                 if (isStep7Completed) {
-                    const isMobile = isMobileDevice();
-                    
-                    // Re-check Quick Look support for iOS devices (in case it wasn't detected initially)
-                    const quickLookSupported = hasQuickLookSupport();
-                    if (quickLookSupported) {
-                        hasARCapability = true;
-                    }
-                    
-                    // Only launch AR if mobile AND has AR capability
-                    // Desktop users and mobile users without AR redirect to recipe page
-                    if (hasARCapability && isMobile) {
+                    if (hasARCapability) {
                         // Step 7 completed and device has AR - launch AR with compressed model
                         launchARWithCompressedModel();
                     } else {
-                        // Step 7 completed but no AR (or desktop) - redirect to recipe page
+                        // Step 7 completed but no AR - redirect to recipe page
                         window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
                     }
-                } else if (isStep6Completed) {
-                    // Step 6 completed - advance to Step 7
-                    playNextStep();
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
                     // Advance to next step
                     playNextStep();
@@ -1864,21 +1726,12 @@
             playKeyframeRange(stepData);
         }
 
-        // Function to handle step 7 completion based on AR capability and device type
+        // Function to handle step 7 completion based on AR capability
         function handleStep7Completion() {
             const step7Data = CONFIG.steps[CONFIG.steps.length - 1];
-            const isMobile = isMobileDevice();
             
-            // Re-check Quick Look support for iOS devices (in case it wasn't detected initially)
-            const quickLookSupported = hasQuickLookSupport();
-            if (quickLookSupported) {
-                hasARCapability = true;
-            }
-            
-            // Only show AR prompt if mobile AND has AR capability
-            // Desktop users and mobile users without AR see the recipe message
-            if (hasARCapability && isMobile) {
-                // Mobile device with AR - show welcome card with AR prompt
+            if (hasARCapability) {
+                // Device has AR - show welcome card with AR prompt
                 titleText.innerText = step7Data.title;
                 descText.innerText = step7Data.desc;
                 // Ensure welcome card is visible
@@ -1891,7 +1744,7 @@
                     arRecipeCard.classList.remove('show-in-viewer');
                 }
             } else {
-                // Desktop or mobile without AR - show recipe message on welcome card
+                // Device doesn't have AR - show recipe message on welcome card
                 titleText.innerText = 'Discover 30 days of Nescafe recipes this Ramadan.';
                 descText.innerText = '';
                 // Ensure welcome card is visible
