@@ -1250,6 +1250,65 @@
                 
                 console.log('AR mode:', mode || 'webxr (inferred)');
                 
+                // Switch to compressed model based on AR mode
+                if (mode === 'webxr' || mode === 'scene-viewer') {
+                    // WebXR or Scene Viewer: use compressed GLB
+                    if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
+                        trackedLog('Switching to compressed GLB for AR:', {
+                            mode: mode,
+                            from: viewer.src,
+                            to: CONFIG.arModelPath
+                        });
+                        viewer.src = CONFIG.arModelPath;
+                    }
+                } else if (mode === 'quick-look') {
+                    // Quick Look: use compressed USDZ
+                    if (CONFIG.iosModelPath) {
+                        // Convert to absolute URL if needed
+                        let iosUrl = CONFIG.iosModelPath;
+                        if (!iosUrl.startsWith('http://') && !iosUrl.startsWith('https://')) {
+                            const baseUrl = window.location.origin;
+                            const path = iosUrl.startsWith('/') ? iosUrl : `/${iosUrl}`;
+                            iosUrl = `${baseUrl}${path}`;
+                        }
+                        
+                        // Add banner parameters if configured
+                        if (CONFIG.iosBanner) {
+                            const banner = CONFIG.iosBanner;
+                            const params = [];
+                            
+                            if (banner.callToAction) {
+                                params.push(`callToAction=${encodeURIComponent(banner.callToAction)}`);
+                            }
+                            if (banner.checkoutTitle) {
+                                params.push(`checkoutTitle=${encodeURIComponent(banner.checkoutTitle)}`);
+                            }
+                            if (banner.checkoutSubtitle) {
+                                params.push(`checkoutSubtitle=${encodeURIComponent(banner.checkoutSubtitle)}`);
+                            }
+                            if (banner.canonicalWebPageURL) {
+                                params.push(`canonicalWebPageURL=${encodeURIComponent(banner.canonicalWebPageURL)}`);
+                            }
+                            if (banner.price) {
+                                params.push(`price=${encodeURIComponent(banner.price)}`);
+                            }
+                            
+                            if (params.length > 0) {
+                                iosUrl = `${iosUrl}#${params.join('&')}`;
+                            }
+                        }
+                        
+                        if (viewer.iosSrc !== iosUrl) {
+                            trackedLog('Switching to compressed USDZ for Quick Look:', {
+                                mode: mode,
+                                from: viewer.iosSrc,
+                                to: iosUrl
+                            });
+                            viewer.setAttribute('ios-src', iosUrl);
+                        }
+                    }
+                }
+                
                 // Show AR recipe card for WebXR mode
                 if (arRecipeCard) {
                     // Check if slot is assigned
@@ -1353,15 +1412,8 @@
                 }
             } else if (status === 'presenting') {
                 
-                
-                
-                // Switch to compressed model for AR mode (better performance)
-                if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
-                    
-                    viewer.src = CONFIG.arModelPath;
-                }
-                
                 // AR recipe card visibility - ensure it's visible for WebXR
+                // Note: Model switching happens only during "session-started" status
                 // NOTE: HTML overlays ONLY work with WebXR, NOT Scene Viewer or Quick Look
                 if (arRecipeCard) {
                     if (mode === 'webxr' || !mode) {
@@ -1632,59 +1684,6 @@
         viewer.addEventListener('click', (event) => {
             const now = Date.now();
             
-            // Get coordinates first - handle both mouse and touch events
-            let clientX, clientY;
-            if (event.touches && event.touches.length > 0) {
-                // Touch event
-                clientX = event.touches[0].clientX;
-                clientY = event.touches[0].clientY;
-            } else if (event.changedTouches && event.changedTouches.length > 0) {
-                // Touch event (changedTouches for touchend)
-                clientX = event.changedTouches[0].clientX;
-                clientY = event.changedTouches[0].clientY;
-            } else {
-                // Mouse event
-                clientX = event.clientX;
-                clientY = event.clientY;
-            }
-            
-            // Check if Step 7 is completed (AR launch step) - if so, ignore clicks on model-viewer
-            // Only the welcome card should be clickable to trigger AR at this point
-            const isStep7Completed = currentStepIndex === CONFIG.steps.length - 1 && CONFIG.steps[currentStepIndex]?.noAnimation;
-            if (isStep7Completed) {
-                // Check if click target is the card or a child of the card
-                const clickTargetIsCard = event.target && card && (
-                    event.target === card || 
-                    event.target.closest('#info-card') === card ||
-                    card.contains(event.target)
-                );
-                
-                // Also check coordinates as fallback
-                const cardRect = card ? card.getBoundingClientRect() : null;
-                const clickOnCardByCoords = cardRect && 
-                    clientX >= cardRect.left && 
-                    clientX <= cardRect.right && 
-                    clientY >= cardRect.top && 
-                    clientY <= cardRect.bottom;
-                
-                const clickOnCard = clickTargetIsCard || clickOnCardByCoords;
-                
-                if (!clickOnCard) {
-                    trackedLog('Model-viewer click ignored - Step 7 active, use welcome card to launch AR', {
-                        clickedOnCard: false,
-                        clickTargetIsCard: clickTargetIsCard,
-                        clickOnCardByCoords: clickOnCardByCoords,
-                        clickTarget: event.target?.id || event.target?.className,
-                        cardRect: cardRect,
-                        clickCoords: { x: clientX, y: clientY }
-                    });
-                    event.preventDefault();
-                    event.stopPropagation();
-                    return;
-                }
-                // If click is on card, let it bubble to card handler (card has stopPropagation)
-            }
-            
             console.log('Click event fired!', {
                 target: event.target,
                 type: event.type,
@@ -1723,6 +1722,22 @@
             if (event.target && (event.target.id === 'ar-button' || event.target.closest('#ar-button'))) {
                 
                 return;
+            }
+            
+            // Get coordinates - handle both mouse and touch events
+            let clientX, clientY;
+            if (event.touches && event.touches.length > 0) {
+                // Touch event
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else if (event.changedTouches && event.changedTouches.length > 0) {
+                // Touch event (changedTouches for touchend)
+                clientX = event.changedTouches[0].clientX;
+                clientY = event.changedTouches[0].clientY;
+            } else {
+                // Mouse event
+                clientX = event.clientX;
+                clientY = event.clientY;
             }
             
             // VALIDATION: Ensure coordinates are valid numbers
@@ -2034,22 +2049,9 @@
                 // Create and immediately click the AR button within the same event handler
                 activateARForIOS();
             } else {
-                // Android/WebXR - switch to compressed GLB model
-                if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
-                    const previousSrc = viewer.src;
-                    viewer.src = CONFIG.arModelPath;
-                    
-                    // Wait for model to load, then activate AR
-                    const activateARAfterLoad = () => {
-                        viewer.removeEventListener('load', activateARAfterLoad);
-                        activateARForWebXR();
-                    };
-                    
-                    viewer.addEventListener('load', activateARAfterLoad, { once: true });
-                } else {
-                    // Model already set, activate AR immediately
-                    activateARForWebXR();
-                }
+                // Android/WebXR - activate AR directly
+                // Model switching will happen automatically during "session-started" status
+                activateARForWebXR();
             }
             
             function activateARForIOS() {
