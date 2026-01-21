@@ -328,6 +328,82 @@
             background: #004499;
         }
 
+        /* On-Screen Console for Debugging */
+        #on-screen-console {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 300px;
+            max-width: calc(100vw - 20px);
+            max-height: calc(100vh - 20px);
+            background: rgba(0, 0, 0, 0.85);
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-y: auto;
+            z-index: 10000;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            display: none; /* Hidden by default, shown when logs are added */
+            pointer-events: auto;
+        }
+
+        #on-screen-console.show {
+            display: block;
+        }
+
+        #on-screen-console .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+        #on-screen-console .log-entry.log {
+            color: #00ff00;
+        }
+
+        #on-screen-console .log-entry.warn {
+            color: #ffaa00;
+        }
+
+        #on-screen-console .log-entry.error {
+            color: #ff0000;
+        }
+
+        #on-screen-console .log-entry.info {
+            color: #00aaff;
+        }
+
+        #on-screen-console .log-entry.debug {
+            color: #aaaaaa;
+        }
+
+        #on-screen-console .log-timestamp {
+            color: #888;
+            font-size: 9px;
+            margin-right: 5px;
+        }
+
+        #on-screen-console .log-clear {
+            position: sticky;
+            top: 0;
+            background: rgba(255, 0, 0, 0.3);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-bottom: 5px;
+            width: 100%;
+            font-size: 10px;
+        }
+
+        #on-screen-console .log-clear:hover {
+            background: rgba(255, 0, 0, 0.5);
+        }
+
     </style>
 </head>
 <body>
@@ -384,8 +460,102 @@
         </div>
     </div>
 
+    <!-- On-Screen Console for Debugging -->
+    <div id="on-screen-console">
+        <button class="log-clear" onclick="clearOnScreenConsole()">Clear Console</button>
+        <div id="console-content"></div>
+    </div>
+
 
     <script type="module">
+        // ============================================
+        // ON-SCREEN CONSOLE FOR DEBUGGING
+        // ============================================
+        
+        const onScreenConsole = document.getElementById('on-screen-console');
+        const consoleContent = document.getElementById('on-screen-console-content') || document.getElementById('console-content');
+        const MAX_CONSOLE_ENTRIES = 50;
+        
+        function addToOnScreenConsole(message, type = 'log') {
+            if (!onScreenConsole || !consoleContent) return;
+            
+            // Show console if hidden
+            onScreenConsole.classList.add('show');
+            
+            // Create log entry
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const timestampSpan = document.createElement('span');
+            timestampSpan.className = 'log-timestamp';
+            timestampSpan.textContent = `[${timestamp}]`;
+            
+            const messageSpan = document.createElement('span');
+            if (typeof message === 'object') {
+                messageSpan.textContent = JSON.stringify(message, null, 2);
+            } else {
+                messageSpan.textContent = String(message);
+            }
+            
+            entry.appendChild(timestampSpan);
+            entry.appendChild(messageSpan);
+            consoleContent.appendChild(entry);
+            
+            // Limit number of entries
+            const entries = consoleContent.querySelectorAll('.log-entry');
+            if (entries.length > MAX_CONSOLE_ENTRIES) {
+                entries[0].remove();
+            }
+            
+            // Auto-scroll to bottom
+            onScreenConsole.scrollTop = onScreenConsole.scrollHeight;
+        }
+        
+        function clearOnScreenConsole() {
+            if (consoleContent) {
+                consoleContent.innerHTML = '';
+            }
+        }
+        
+        // Make clearOnScreenConsole available globally
+        window.clearOnScreenConsole = clearOnScreenConsole;
+        
+        // Enhanced console logging that also writes to on-screen console
+        const originalConsole = {
+            log: console.log.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console),
+            info: console.info.bind(console)
+        };
+        
+        // Override console methods for AR-related tracking
+        function createTrackedLogger(originalMethod, type) {
+            return function(...args) {
+                // Call original console method
+                originalMethod.apply(console, args);
+                
+                // Also add to on-screen console
+                const message = args.map(arg => {
+                    if (typeof arg === 'object') {
+                        return JSON.stringify(arg, null, 2);
+                    }
+                    return String(arg);
+                }).join(' ');
+                
+                addToOnScreenConsole(message, type);
+            };
+        }
+        
+        // Track AR-related logs
+        const trackedLog = createTrackedLogger(originalConsole.log, 'log');
+        const trackedWarn = createTrackedLogger(originalConsole.warn, 'warn');
+        const trackedError = createTrackedLogger(originalConsole.error, 'error');
+        const trackedInfo = createTrackedLogger(originalConsole.info, 'info');
+        
+        // Initial log to confirm console is working
+        trackedLog('On-screen console initialized - AR tracking enabled');
+        
         // ============================================
         // CONFIGURATION: Keyframe-based animation with object-specific taps
         // ============================================
@@ -1016,6 +1186,11 @@
             const mode = event.detail.mode;
             currentARMode = mode;
             
+            trackedLog('AR Status Changed:', {
+                status: status,
+                mode: mode || 'not-specified'
+            });
+            
             
             
             
@@ -1032,7 +1207,13 @@
             }
             
             if (status === 'failed') {
-                console.error('=== AR INITIALIZATION FAILED ===');
+                trackedError('=== AR INITIALIZATION FAILED ===');
+                trackedError('AR Failure Details:', {
+                    status: status,
+                    mode: mode,
+                    arAvailable: viewer.arAvailable,
+                    iosSrc: viewer.iosSrc
+                });
                 
                 
                 
@@ -1401,7 +1582,7 @@
                 hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported)) || hasIOSQuickLook;
                 
                 // Log AR capability status
-                console.log('AR Capability Check:', {
+                trackedLog('AR Capability Check:', {
                     isIOS: isIOS,
                     isMobile: isMobile,
                     viewerArAvailable: viewer.arAvailable,
@@ -1415,9 +1596,9 @@
                 
                 if (isIOS) {
                     if (hasIOSQuickLook) {
-                        console.log('✅ iOS Quick Look AR detected and available');
+                        trackedLog('✅ iOS Quick Look AR detected and available');
                     } else {
-                        console.warn('⚠️ iOS device detected but Quick Look AR not available:', {
+                        trackedWarn('⚠️ iOS device detected but Quick Look AR not available:', {
                             hasIOSModelPath: !!CONFIG.iosModelPath,
                             iosSrc: viewer.iosSrc,
                             hasIOSSrcAttribute: viewer.hasAttribute('ios-src')
@@ -1672,9 +1853,17 @@
                     const isMobile = isMobileDevice();
                     const isIOS = isIOSDevice();
                     
+                    trackedLog('Step 7 completed - Card clicked', {
+                        isMobile: isMobile,
+                        isIOS: isIOS,
+                        hasARCapability: hasARCapability,
+                        currentARMode: currentARMode
+                    });
+                    
                     // Only launch AR if mobile AND has AR capability
                     // Desktop users and mobile users without AR redirect to recipe page
                     if (hasARCapability && isMobile) {
+                        trackedLog('Launching AR - Mobile device with AR capability detected');
                         // For iOS: trigger AR synchronously as part of this click event to preserve user gesture
                         if (isIOS) {
                             // Find or create AR button immediately (synchronously)
@@ -1701,27 +1890,46 @@
                             
                             // Trigger click immediately (synchronously) to preserve user gesture chain
                             try {
+                                trackedLog('Attempting to trigger iOS Quick Look AR...');
+                                trackedLog('AR Button found:', {
+                                    exists: !!arButton,
+                                    slot: arButton?.slot,
+                                    hasClick: typeof arButton?.click === 'function'
+                                });
+                                
                                 if (arButton.click) {
                                     arButton.click();
+                                    trackedLog('✅ iOS Quick Look AR triggered via .click()');
                                 } else {
                                     arButton.dispatchEvent(new MouseEvent('click', {
                                         bubbles: true,
                                         cancelable: true,
                                         view: window
                                     }));
+                                    trackedLog('✅ iOS Quick Look AR triggered via dispatchEvent()');
                                 }
-                                console.log('✅ iOS Quick Look AR triggered synchronously');
+                                trackedLog('✅ iOS Quick Look AR triggered synchronously');
                             } catch (error) {
-                                console.error('❌ Error triggering iOS AR:', error);
+                                trackedError('❌ Error triggering iOS AR:', error);
+                                trackedError('Error details:', {
+                                    message: error.message,
+                                    stack: error.stack
+                                });
                                 // Fallback to async method
+                                trackedWarn('Falling back to async AR launch method');
                                 launchARWithCompressedModel();
                             }
                         } else {
                             // Android/WebXR - use async method
+                            trackedLog('Launching AR - Android/WebXR device detected');
                             launchARWithCompressedModel();
                         }
                     } else {
                         // Step 7 completed but no AR (or desktop) - redirect to recipe page
+                        trackedLog('No AR capability - Redirecting to recipe page', {
+                            isMobile: isMobile,
+                            hasARCapability: hasARCapability
+                        });
                         window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
                     }
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
@@ -1807,18 +2015,28 @@
             }
             
             function activateARForIOS() {
+                trackedLog('activateARForIOS() called');
                 // For iOS Quick Look, we need to trigger AR synchronously as part of user gesture
                 // First, try to find the existing AR button that model-viewer creates
                 let arButton = viewer.querySelector('button[slot="ar-button"]');
                 
+                trackedLog('AR Button search:', {
+                    found: !!arButton,
+                    viewerArAvailable: viewer.arAvailable,
+                    iosSrc: viewer.iosSrc
+                });
+                
                 if (!arButton) {
+                    trackedLog('Creating new AR button...');
                     // If no button exists, create one
                     arButton = document.createElement('button');
                     arButton.slot = 'ar-button';
                     arButton.setAttribute('aria-label', 'Launch AR');
                     arButton.style.cssText = 'position: absolute; opacity: 0; pointer-events: auto; width: 100%; height: 100%; top: 0; left: 0; z-index: 9999;';
                     viewer.appendChild(arButton);
+                    trackedLog('AR button created and appended');
                 } else {
+                    trackedLog('Using existing AR button');
                     // Temporarily make the existing button visible and clickable
                     const originalDisplay = arButton.style.display;
                     arButton.style.display = 'block';
@@ -1834,6 +2052,7 @@
                 
                 // Trigger click immediately (synchronously) to preserve user gesture
                 try {
+                    trackedLog('Attempting to trigger AR button click...');
                     // Use a trusted click event
                     const clickEvent = new MouseEvent('click', {
                         bubbles: true,
@@ -1846,22 +2065,31 @@
                     // Try direct click first (this preserves the user gesture chain better)
                     if (arButton.click) {
                         arButton.click();
+                        trackedLog('✅ AR button clicked via .click()');
                     } else {
                         arButton.dispatchEvent(clickEvent);
+                        trackedLog('✅ AR button clicked via dispatchEvent()');
                     }
                     
-                    console.log('✅ iOS Quick Look AR triggered');
+                    trackedLog('✅ iOS Quick Look AR triggered');
                 } catch (error) {
-                    console.error('❌ Error triggering iOS AR:', error);
+                    trackedError('❌ Error triggering iOS AR:', error);
+                    trackedError('Error details:', {
+                        message: error.message,
+                        stack: error.stack
+                    });
                     // Fallback: try using model-viewer's activateAR method if available
                     if (viewer.activateAR && typeof viewer.activateAR === 'function') {
                         try {
+                            trackedLog('Trying viewer.activateAR() as fallback...');
                             viewer.activateAR();
+                            trackedLog('✅ viewer.activateAR() called');
                         } catch (e) {
-                            console.error('❌ activateAR() also failed:', e);
+                            trackedError('❌ activateAR() also failed:', e);
                             descText.innerText = 'Please tap the AR button in the top-right corner';
                         }
                     } else {
+                        trackedWarn('viewer.activateAR() not available');
                         descText.innerText = 'Please tap the AR button in the top-right corner';
                     }
                 } finally {
@@ -1871,11 +2099,13 @@
                             // Only remove if we created it
                             if (!viewer.querySelector('button[slot="ar-button"]')) {
                                 arButton.remove();
+                                trackedLog('Created AR button removed');
                             } else {
                                 // Restore original display if we modified an existing button
                                 arButton.style.display = '';
                                 arButton.style.opacity = '';
                                 arButton.style.pointerEvents = '';
+                                trackedLog('AR button styles restored');
                             }
                         }
                     }, 500);
