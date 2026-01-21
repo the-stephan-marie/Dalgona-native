@@ -682,61 +682,7 @@
 
         // Set model paths from config
         viewer.src = CONFIG.modelPath;
-        // Enhance iOS source with Quick Look banner parameters
-        // Note: ios-src is already set in HTML for immediate Quick Look availability
-        // Here we enhance it with absolute URL and banner parameters for better UX
-        if (CONFIG.iosModelPath) {
-            // Build iOS URL with banner parameters
-            // Parameters are appended with # and separated by &
-            // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
-            // Note: USDZ URL should be absolute for banner parameters to work
-            let iosUrl = CONFIG.iosModelPath;
-            
-            // Convert relative path to absolute URL if needed
-            if (!iosUrl.startsWith('http://') && !iosUrl.startsWith('https://')) {
-                // Use current origin to create absolute URL
-                const baseUrl = window.location.origin;
-                const path = iosUrl.startsWith('/') ? iosUrl : `/${iosUrl}`;
-                iosUrl = `${baseUrl}${path}`;
-            }
-            
-            if (CONFIG.iosBanner) {
-                const banner = CONFIG.iosBanner;
-                const params = [];
-                
-                // Add banner parameters (URL encoded)
-                if (banner.callToAction) {
-                    params.push(`callToAction=${encodeURIComponent(banner.callToAction)}`);
-                }
-                if (banner.checkoutTitle) {
-                    params.push(`checkoutTitle=${encodeURIComponent(banner.checkoutTitle)}`);
-                }
-                if (banner.checkoutSubtitle) {
-                    params.push(`checkoutSubtitle=${encodeURIComponent(banner.checkoutSubtitle)}`);
-                }
-                if (banner.canonicalWebPageURL) {
-                    params.push(`canonicalWebPageURL=${encodeURIComponent(banner.canonicalWebPageURL)}`);
-                }
-                if (banner.price) {
-                    params.push(`price=${encodeURIComponent(banner.price)}`);
-                }
-                
-                // Append parameters to USDZ URL with #
-                if (params.length > 0) {
-                    iosUrl = `${iosUrl}#${params.join('&')}`;
-                }
-                
-                
-                
-            }
-            
-            viewer.setAttribute('ios-src', iosUrl);
-            
-            
-            
-        } else {
-            console.log('⚠️ No USDZ file specified - iOS will use GLB (may have limitations)');
-        }
+        // Note: ios-src is set directly in HTML for immediate Quick Look availability
         viewer.animationName = CONFIG.animationName;
         viewer.autoplay = false;  // Disabled - animations play on user interaction
         viewer.loop = false;
