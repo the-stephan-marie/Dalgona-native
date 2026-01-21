@@ -682,7 +682,50 @@
 
         // Set model paths from config
         viewer.src = CONFIG.modelPath;
-        // Note: ios-src is set directly in HTML for immediate Quick Look availability
+        
+        // Enhance ios-src with Quick Look banner parameters
+        // Note: ios-src is already set in HTML for immediate Quick Look availability
+        // We enhance it here with absolute URL and banner parameters
+        if (CONFIG.iosBanner && viewer.iosSrc) {
+            // Get the current ios-src value (set in HTML)
+            let iosUrl = viewer.iosSrc;
+            
+            // Convert relative path to absolute URL if needed
+            // Banner parameters require absolute URLs to work properly
+            if (!iosUrl.startsWith('http://') && !iosUrl.startsWith('https://')) {
+                const baseUrl = window.location.origin;
+                const path = iosUrl.startsWith('/') ? iosUrl : `/${iosUrl}`;
+                iosUrl = `${baseUrl}${path}`;
+            }
+            
+            // Build banner parameters
+            const banner = CONFIG.iosBanner;
+            const params = [];
+            
+            if (banner.callToAction) {
+                params.push(`callToAction=${encodeURIComponent(banner.callToAction)}`);
+            }
+            if (banner.checkoutTitle) {
+                params.push(`checkoutTitle=${encodeURIComponent(banner.checkoutTitle)}`);
+            }
+            if (banner.checkoutSubtitle) {
+                params.push(`checkoutSubtitle=${encodeURIComponent(banner.checkoutSubtitle)}`);
+            }
+            if (banner.canonicalWebPageURL) {
+                params.push(`canonicalWebPageURL=${encodeURIComponent(banner.canonicalWebPageURL)}`);
+            }
+            if (banner.price) {
+                params.push(`price=${encodeURIComponent(banner.price)}`);
+            }
+            
+            // Append banner parameters to USDZ URL with # separator
+            // See: https://www.variant3d.com/blog/using-banners-in-quicklooks
+            if (params.length > 0) {
+                iosUrl = `${iosUrl}#${params.join('&')}`;
+                viewer.setAttribute('ios-src', iosUrl);
+            }
+        }
+        
         viewer.animationName = CONFIG.animationName;
         viewer.autoplay = false;  // Disabled - animations play on user interaction
         viewer.loop = false;
