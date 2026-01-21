@@ -133,41 +133,71 @@
             z-index: 100;
         }
 
+        /* Light sweep animation */
+        @keyframes lightSweep {
+            0% {
+                background-position: -200% center;
+            }
+            100% {
+                background-position: 200% center;
+            }
+        }
+
         /* The Branding / Instruction Card */
         .card {
             display: inline-block;
-            background: white;
+            background: #dc2626; /* Red background */
+            background-image: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.3) 50%,
+                transparent 100%
+            );
+            background-size: 200% 100%;
+            background-position: -200% center;
+            animation: lightSweep 3s ease-in-out infinite;
             padding: 16px 24px;
             border-radius: 50px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.4), /* Drop shadow */
+                0 0 20px rgba(220, 38, 38, 0.3); /* Faint outer glow */
             transform: translateY(0);
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
             pointer-events: auto; /* Enable clicks on the card */
             cursor: pointer; /* Show it's clickable */
+            position: relative;
         }
 
         .card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 35px rgba(0,0,0,0.2);
+            box-shadow: 
+                0 12px 35px rgba(0, 0, 0, 0.5), /* Stronger drop shadow on hover */
+                0 0 25px rgba(220, 38, 38, 0.4); /* Stronger glow on hover */
         }
 
         .card:active {
             transform: translateY(0);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            box-shadow: 
+                0 8px 25px rgba(0, 0, 0, 0.4),
+                0 0 15px rgba(220, 38, 38, 0.3);
         }
 
         .card h2 {
             margin: 0;
             font-size: 18px;
-            color: #333;
+            color: #ffffff; /* White text */
             text-transform: uppercase;
             letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
         }
 
         .card p {
             margin: 4px 0 0 0;
             font-size: 14px;
-            color: #555;
+            color: #ffffff; /* White text */
+            position: relative;
+            z-index: 1;
         }
 
         /* Hide UI while loading */
@@ -321,6 +351,7 @@
         disable-tap
         shadow-intensity="1.2"
         environment-image="assets/bryanston_park_sunrise_1k.hdr" 
+        exposure="1.1"
         tone-mapping="commerce"
         animation-name="animation_0">
         
@@ -559,6 +590,8 @@
             // Set initial time to frame 0
             viewer.currentTime = frameToTime(0);
             viewer.pause();
+            // Ensure looping is disabled from the start
+            viewer.loop = false;
             
             // Access hierarchy and build mappings
             setupHitDetection();
@@ -841,11 +874,15 @@
             const startTime = frameToTime(stepData.startFrame);
             const endTime = frameToTime(stepData.endFrame);
             
+            // Explicitly disable looping before setting time
+            viewer.loop = false;
+            
             // Set the start time
             viewer.currentTime = startTime;
             
             // Play the animation
             viewer.play();
+            // Ensure loop is set correctly (should be false for all steps)
             viewer.loop = stepData.loop || false;
             
             // Monitor playback using requestAnimationFrame for smooth control
@@ -856,6 +893,8 @@
                     // Ensure we're exactly on the final frame
                     viewer.currentTime = endTime;
                     viewer.pause();
+                    // Explicitly disable looping to prevent any automatic restart
+                    viewer.loop = false;
                     isAnimating = false;
                     
                     if (stepData.loop) {
@@ -865,6 +904,10 @@
                         requestAnimationFrame(checkPlayback);
                     } else {
                         // Finished - stay on final frame
+                        // Ensure loop is disabled
+                        viewer.loop = false;
+                        viewer.pause();
+                        
                         if (currentStepIndex < CONFIG.steps.length - 1) {
                             // Show next step's description
                             const nextStep = CONFIG.steps[currentStepIndex + 1];
@@ -1586,11 +1629,15 @@
                 
                 // Check if step 7 is completed - if so, launch AR or redirect
                 if (isStep7Completed) {
-                    if (hasARCapability) {
+                    const isMobile = isMobileDevice();
+                    
+                    // Only launch AR if mobile AND has AR capability
+                    // Desktop users and mobile users without AR redirect to recipe page
+                    if (hasARCapability && isMobile) {
                         // Step 7 completed and device has AR - launch AR with compressed model
                         launchARWithCompressedModel();
                     } else {
-                        // Step 7 completed but no AR - redirect to recipe page
+                        // Step 7 completed but no AR (or desktop) - redirect to recipe page
                         window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
                     }
                 } else if (currentStepIndex < CONFIG.steps.length - 1) {
@@ -1726,12 +1773,15 @@
             playKeyframeRange(stepData);
         }
 
-        // Function to handle step 7 completion based on AR capability
+        // Function to handle step 7 completion based on AR capability and device type
         function handleStep7Completion() {
             const step7Data = CONFIG.steps[CONFIG.steps.length - 1];
+            const isMobile = isMobileDevice();
             
-            if (hasARCapability) {
-                // Device has AR - show welcome card with AR prompt
+            // Only show AR prompt if mobile AND has AR capability
+            // Desktop users and mobile users without AR see the recipe message
+            if (hasARCapability && isMobile) {
+                // Mobile device with AR - show welcome card with AR prompt
                 titleText.innerText = step7Data.title;
                 descText.innerText = step7Data.desc;
                 // Ensure welcome card is visible
@@ -1744,7 +1794,7 @@
                     arRecipeCard.classList.remove('show-in-viewer');
                 }
             } else {
-                // Device doesn't have AR - show recipe message on welcome card
+                // Desktop or mobile without AR - show recipe message on welcome card
                 titleText.innerText = 'Discover 30 days of Nescafe recipes this Ramadan.';
                 descText.innerText = '';
                 // Ensure welcome card is visible
