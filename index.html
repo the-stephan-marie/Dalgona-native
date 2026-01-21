@@ -1250,65 +1250,6 @@
                 
                 console.log('AR mode:', mode || 'webxr (inferred)');
                 
-                // Switch to compressed model based on AR mode
-                if (mode === 'webxr' || mode === 'scene-viewer') {
-                    // WebXR or Scene Viewer: use compressed GLB
-                    if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
-                        trackedLog('Switching to compressed GLB for AR:', {
-                            mode: mode,
-                            from: viewer.src,
-                            to: CONFIG.arModelPath
-                        });
-                        viewer.src = CONFIG.arModelPath;
-                    }
-                } else if (mode === 'quick-look') {
-                    // Quick Look: use compressed USDZ
-                    if (CONFIG.iosModelPath) {
-                        // Convert to absolute URL if needed
-                        let iosUrl = CONFIG.iosModelPath;
-                        if (!iosUrl.startsWith('http://') && !iosUrl.startsWith('https://')) {
-                            const baseUrl = window.location.origin;
-                            const path = iosUrl.startsWith('/') ? iosUrl : `/${iosUrl}`;
-                            iosUrl = `${baseUrl}${path}`;
-                        }
-                        
-                        // Add banner parameters if configured
-                        if (CONFIG.iosBanner) {
-                            const banner = CONFIG.iosBanner;
-                            const params = [];
-                            
-                            if (banner.callToAction) {
-                                params.push(`callToAction=${encodeURIComponent(banner.callToAction)}`);
-                            }
-                            if (banner.checkoutTitle) {
-                                params.push(`checkoutTitle=${encodeURIComponent(banner.checkoutTitle)}`);
-                            }
-                            if (banner.checkoutSubtitle) {
-                                params.push(`checkoutSubtitle=${encodeURIComponent(banner.checkoutSubtitle)}`);
-                            }
-                            if (banner.canonicalWebPageURL) {
-                                params.push(`canonicalWebPageURL=${encodeURIComponent(banner.canonicalWebPageURL)}`);
-                            }
-                            if (banner.price) {
-                                params.push(`price=${encodeURIComponent(banner.price)}`);
-                            }
-                            
-                            if (params.length > 0) {
-                                iosUrl = `${iosUrl}#${params.join('&')}`;
-                            }
-                        }
-                        
-                        if (viewer.iosSrc !== iosUrl) {
-                            trackedLog('Switching to compressed USDZ for Quick Look:', {
-                                mode: mode,
-                                from: viewer.iosSrc,
-                                to: iosUrl
-                            });
-                            viewer.setAttribute('ios-src', iosUrl);
-                        }
-                    }
-                }
-                
                 // Show AR recipe card for WebXR mode
                 if (arRecipeCard) {
                     // Check if slot is assigned
@@ -1393,12 +1334,6 @@
                 // Stop auto-play when exiting AR mode
                 stopAutoPlay();
                 
-                // Switch back to original model when exiting AR mode
-                if (CONFIG.arModelPath && viewer.src !== CONFIG.modelPath) {
-                    
-                    viewer.src = CONFIG.modelPath;
-                }
-                
                 // Hide AR recipe card when exiting AR
                 if (arRecipeCard) {
                     arRecipeCard.style.display = 'none';
@@ -1413,7 +1348,6 @@
             } else if (status === 'presenting') {
                 
                 // AR recipe card visibility - ensure it's visible for WebXR
-                // Note: Model switching happens only during "session-started" status
                 // NOTE: HTML overlays ONLY work with WebXR, NOT Scene Viewer or Quick Look
                 if (arRecipeCard) {
                     if (mode === 'webxr' || !mode) {
@@ -2050,7 +1984,7 @@
                 activateARForIOS();
             } else {
                 // Android/WebXR - activate AR directly
-                // Model switching will happen automatically during "session-started" status
+                // Model-viewer handles model selection automatically based on AR mode
                 activateARForWebXR();
             }
             
