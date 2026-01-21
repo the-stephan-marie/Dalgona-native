@@ -977,6 +977,11 @@
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
         
+        // Detect iOS devices specifically
+        function isIOSDevice() {
+            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
+        
         // Check if WebXR is available (for desktop AR)
         async function checkWebXRSupport() {
             if (!navigator.xr) {
@@ -1383,7 +1388,42 @@
                 
                 // Store AR capability status globally
                 // AR is available if: model-viewer reports it, OR WebXR is supported, OR mobile has AR/WebXR
-                hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported));
+                // For iOS: Quick Look is available if ios-src is set (which we check via CONFIG.iosModelPath)
+                const isIOS = isIOSDevice();
+                
+                // Check iOS Quick Look availability
+                // iOS Quick Look works if:
+                // 1. Device is iOS
+                // 2. ios-src attribute is set (we set it in initialization)
+                // 3. USDZ file exists (CONFIG.iosModelPath)
+                const hasIOSQuickLook = isIOS && CONFIG.iosModelPath && (viewer.iosSrc || viewer.hasAttribute('ios-src'));
+                
+                hasARCapability = viewer.arAvailable || webXRSupported || (isMobile && (viewer.arAvailable || mobileWebXRSupported)) || hasIOSQuickLook;
+                
+                // Log AR capability status
+                console.log('AR Capability Check:', {
+                    isIOS: isIOS,
+                    isMobile: isMobile,
+                    viewerArAvailable: viewer.arAvailable,
+                    webXRSupported: webXRSupported,
+                    mobileWebXRSupported: mobileWebXRSupported,
+                    iosModelPath: CONFIG.iosModelPath,
+                    iosSrc: viewer.iosSrc,
+                    hasIOSQuickLook: hasIOSQuickLook,
+                    hasARCapability: hasARCapability
+                });
+                
+                if (isIOS) {
+                    if (hasIOSQuickLook) {
+                        console.log('✅ iOS Quick Look AR detected and available');
+                    } else {
+                        console.warn('⚠️ iOS device detected but Quick Look AR not available:', {
+                            hasIOSModelPath: !!CONFIG.iosModelPath,
+                            iosSrc: viewer.iosSrc,
+                            hasIOSSrcAttribute: viewer.hasAttribute('ios-src')
+                        });
+                    }
+                }
                 
             }, 2000); // Increased timeout to allow WebXR to initialize
         });
@@ -1630,12 +1670,56 @@
                 // Check if step 7 is completed - if so, launch AR or redirect
                 if (isStep7Completed) {
                     const isMobile = isMobileDevice();
+                    const isIOS = isIOSDevice();
                     
                     // Only launch AR if mobile AND has AR capability
                     // Desktop users and mobile users without AR redirect to recipe page
                     if (hasARCapability && isMobile) {
-                        // Step 7 completed and device has AR - launch AR with compressed model
-                        launchARWithCompressedModel();
+                        // For iOS: trigger AR synchronously as part of this click event to preserve user gesture
+                        if (isIOS) {
+                            // Find or create AR button immediately (synchronously)
+                            let arButton = viewer.querySelector('button[slot="ar-button"]');
+                            
+                            if (!arButton) {
+                                arButton = document.createElement('button');
+                                arButton.slot = 'ar-button';
+                                arButton.setAttribute('aria-label', 'Launch AR');
+                                arButton.style.cssText = 'position: absolute; opacity: 0; pointer-events: auto; width: 100%; height: 100%; top: 0; left: 0; z-index: 9999;';
+                                viewer.appendChild(arButton);
+                            } else {
+                                // Make existing button clickable
+                                arButton.style.display = 'block';
+                                arButton.style.opacity = '0';
+                                arButton.style.pointerEvents = 'auto';
+                                arButton.style.position = 'absolute';
+                                arButton.style.width = '100%';
+                                arButton.style.height = '100%';
+                                arButton.style.top = '0';
+                                arButton.style.left = '0';
+                                arButton.style.zIndex = '9999';
+                            }
+                            
+                            // Trigger click immediately (synchronously) to preserve user gesture chain
+                            try {
+                                if (arButton.click) {
+                                    arButton.click();
+                                } else {
+                                    arButton.dispatchEvent(new MouseEvent('click', {
+                                        bubbles: true,
+                                        cancelable: true,
+                                        view: window
+                                    }));
+                                }
+                                console.log('✅ iOS Quick Look AR triggered synchronously');
+                            } catch (error) {
+                                console.error('❌ Error triggering iOS AR:', error);
+                                // Fallback to async method
+                                launchARWithCompressedModel();
+                            }
+                        } else {
+                            // Android/WebXR - use async method
+                            launchARWithCompressedModel();
+                        }
                     } else {
                         // Step 7 completed but no AR (or desktop) - redirect to recipe page
                         window.location.href = 'https://www.nescafe.com/mena/en-ae/recipes/nescafe-3in1-dalgona';
@@ -1687,27 +1771,118 @@
 
         // Function to launch AR with compressed model
         function launchARWithCompressedModel() {
+            const isIOS = isIOSDevice();
             
-            
-            // Switch to compressed model for AR
-            if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
-                const previousSrc = viewer.src;
-                viewer.src = CONFIG.arModelPath;
+            // For iOS: Quick Look uses USDZ, so we need to ensure ios-src is set correctly
+            // For other platforms: use compressed GLB
+            if (isIOS) {
+                // iOS Quick Look - ensure ios-src is set (it should already be set)
+                // Quick Look will use the USDZ file specified in ios-src
+                if (!viewer.iosSrc) {
+                    console.error('❌ iOS Quick Look requires ios-src attribute to be set');
+                    descText.innerText = 'AR not available - missing USDZ file';
+                    return;
+                }
                 
-                
-                // Wait for model to load, then activate AR
-                const activateARAfterLoad = () => {
-                    viewer.removeEventListener('load', activateARAfterLoad);
-                    activateAR();
-                };
-                
-                viewer.addEventListener('load', activateARAfterLoad, { once: true });
+                // For iOS, we need to trigger AR synchronously as part of the user gesture
+                // Create and immediately click the AR button within the same event handler
+                activateARForIOS();
             } else {
-                // Model already set, activate AR immediately
-                activateAR();
+                // Android/WebXR - switch to compressed GLB model
+                if (CONFIG.arModelPath && viewer.src !== CONFIG.arModelPath) {
+                    const previousSrc = viewer.src;
+                    viewer.src = CONFIG.arModelPath;
+                    
+                    // Wait for model to load, then activate AR
+                    const activateARAfterLoad = () => {
+                        viewer.removeEventListener('load', activateARAfterLoad);
+                        activateARForWebXR();
+                    };
+                    
+                    viewer.addEventListener('load', activateARAfterLoad, { once: true });
+                } else {
+                    // Model already set, activate AR immediately
+                    activateARForWebXR();
+                }
             }
             
-            function activateAR() {
+            function activateARForIOS() {
+                // For iOS Quick Look, we need to trigger AR synchronously as part of user gesture
+                // First, try to find the existing AR button that model-viewer creates
+                let arButton = viewer.querySelector('button[slot="ar-button"]');
+                
+                if (!arButton) {
+                    // If no button exists, create one
+                    arButton = document.createElement('button');
+                    arButton.slot = 'ar-button';
+                    arButton.setAttribute('aria-label', 'Launch AR');
+                    arButton.style.cssText = 'position: absolute; opacity: 0; pointer-events: auto; width: 100%; height: 100%; top: 0; left: 0; z-index: 9999;';
+                    viewer.appendChild(arButton);
+                } else {
+                    // Temporarily make the existing button visible and clickable
+                    const originalDisplay = arButton.style.display;
+                    arButton.style.display = 'block';
+                    arButton.style.opacity = '0';
+                    arButton.style.pointerEvents = 'auto';
+                    arButton.style.position = 'absolute';
+                    arButton.style.width = '100%';
+                    arButton.style.height = '100%';
+                    arButton.style.top = '0';
+                    arButton.style.left = '0';
+                    arButton.style.zIndex = '9999';
+                }
+                
+                // Trigger click immediately (synchronously) to preserve user gesture
+                try {
+                    // Use a trusted click event
+                    const clickEvent = new MouseEvent('click', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        buttons: 1,
+                        isTrusted: false // We'll try to make it trusted via direct click
+                    });
+                    
+                    // Try direct click first (this preserves the user gesture chain better)
+                    if (arButton.click) {
+                        arButton.click();
+                    } else {
+                        arButton.dispatchEvent(clickEvent);
+                    }
+                    
+                    console.log('✅ iOS Quick Look AR triggered');
+                } catch (error) {
+                    console.error('❌ Error triggering iOS AR:', error);
+                    // Fallback: try using model-viewer's activateAR method if available
+                    if (viewer.activateAR && typeof viewer.activateAR === 'function') {
+                        try {
+                            viewer.activateAR();
+                        } catch (e) {
+                            console.error('❌ activateAR() also failed:', e);
+                            descText.innerText = 'Please tap the AR button in the top-right corner';
+                        }
+                    } else {
+                        descText.innerText = 'Please tap the AR button in the top-right corner';
+                    }
+                } finally {
+                    // Clean up after a short delay
+                    setTimeout(() => {
+                        if (arButton && arButton.parentNode) {
+                            // Only remove if we created it
+                            if (!viewer.querySelector('button[slot="ar-button"]')) {
+                                arButton.remove();
+                            } else {
+                                // Restore original display if we modified an existing button
+                                arButton.style.display = '';
+                                arButton.style.opacity = '';
+                                arButton.style.pointerEvents = '';
+                            }
+                        }
+                    }, 500);
+                }
+            }
+            
+            function activateARForWebXR() {
                 // Create a temporary AR button and trigger it
                 // This is the most reliable way to activate AR in model-viewer
                 const tempButton = document.createElement('button');
